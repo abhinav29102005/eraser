@@ -109,7 +109,7 @@ function App() {
 
 
   return (
-    <div className="App" style={{ padding: '20px' }}>
+    <div className="App" >
       {/* Moved global error display here */}
       {error && <p style={{ color: 'red', border: '1px solid red', padding: '10px' }}>Error: {error}</p>}
 

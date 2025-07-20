@@ -1,6 +1,6 @@
 // src/components/BoardCanvas.jsx
 import React from 'react';
-import KonvaDrawingBoard from './KonvaDrawingBoard'; // <--- Import the actual Konva component
+import KonvaDrawingBoard from './KonvaDrawingBoard';
 
 function BoardCanvas({ board, onBackToList, onSaveStroke }) {
   if (!board) {
@@ -8,23 +8,29 @@ function BoardCanvas({ board, onBackToList, onSaveStroke }) {
   }
 
   return (
-    <div style={{ padding: '20px', border: '1px solid #ddd', borderRadius: '8px' }}>
-      <button onClick={onBackToList} style={{ marginBottom: '20px', padding: '8px 15px', cursor: 'pointer' }}>
-        ← Back to Your Boards
-      </button>
+    // Adjust this outer div to take full available height and width
+    // Removing padding/border here so KonvaDrawingBoard can go edge-to-edge
+    // We'll rely on KonvaDrawingBoard's internal styling for its full screen effect
+    <div className="flex flex-col w-full h-screen bg-[#121417]"> {/* Use Tailwind/CSS for full height/width */}
+      {/* Header/Info Bar for the Board Page */}
+      <div className="bg-slate-800 text-white p-4 flex items-center justify-between shadow-md">
+        <button onClick={onBackToList} style={{ padding: '8px 15px', cursor: 'pointer', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '5px' }}>
+          ← Back to Boards
+        </button>
+        <h2 className="text-xl font-bold">{board.title}</h2>
+        <p className="text-sm text-slate-400">ID: {board.id} | Created: {new Date(board.createdAt).toLocaleDateString()}</p>
+      </div>
 
-      <h2>Board: {board.title}</h2>
-      <p>ID: {board.id}</p>
-      <p>Created: {new Date(board.createdAt).toLocaleDateString()}</p>
+      {/* KonvaDrawingBoard will take the remaining height */}
+      <div className="flex-1 overflow-hidden"> {/* This div ensures it expands to fill remaining space */}
+        <KonvaDrawingBoard
+          boardId={board.id}
+          initialStrokes={board.strokes}
+          onSaveStroke={onSaveStroke}
+        />
+      </div>
 
-      {/* Embed the KonvaDrawingBoard here */}
-      <KonvaDrawingBoard
-        boardId={board.id}
-        initialStrokes={board.strokes} // Pass the fetched strokes
-        onSaveStroke={onSaveStroke} // Pass the save handler from App.jsx
-      />
-
-      {/* Removed the dummy stroke button and strokes list display */}
+      {/* You might want a footer here later */}
     </div>
   );
 }
