@@ -1,4 +1,4 @@
-// src/services/boardService.js (Example of a service file for API calls)
+// src/services/boardService.js
 import axiosInstance from '../api/axiosInstance';
 
 export const createNewBoard = async (boardName) => {
@@ -61,12 +61,21 @@ export const updateBoardName = async (boardId, newName) => {
 
 export const deleteBoard = async (boardId) => {
   try {
-    // Axios doesn't automatically throw for non-2xx codes, but our interceptor might.
-    // If not using the response interceptor for error throwing, you'd check response.status here.
     await axiosInstance.delete(`/boards/${boardId}`);
     return { message: `Board ${boardId} deleted successfully` }; // Backend returns msg
   } catch (error) {
     console.error('Failed to delete board:', error.response?.data || error.message);
     throw error.response?.data || error;
   }
+};
+
+// --- THIS IS THE MISSING FUNCTION YOU NEED TO ADD ---
+export const replaceStrokes = async (boardId, strokesArray) => {
+    try {
+        const response = await axiosInstance.patch(`/boards/${boardId}/strokes`, strokesArray);
+        return response.data;
+    } catch (error) {
+        console.error('Failed to replace strokes:', error.response?.data || error.message);
+        throw error.response?.data || error;
+    }
 };

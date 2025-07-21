@@ -1,1 +1,15 @@
 @import "tailwindcss";
+html, body, #root {
+  height: 100%;       /* Make them take full viewport height */
+  width: 100%;        /* Make them take full viewport width */
+  margin: 0;          /* Remove default browser margin */
+  padding: 0;         /* Remove default browser padding */
+  overflow-x: hidden; /* Prevent horizontal scrollbar if not needed */
+}
+
+/* Ensure the main div of your App component also stretches */
+/* This targets the direct child of <div id="root">...</div> which is your App component's outer div */
+#root > div {
+  min-height: 100%;
+  width: 100%;
+}

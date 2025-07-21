@@ -1,8 +1,8 @@
 // src/components/HomePage.jsx
 import React, { useState } from 'react';
-import { Search, HelpCircle, Plus, Loader2, AlertCircle, RefreshCw } from 'lucide-react'; // Assuming lucide-react is installed
+import { Search, HelpCircle, Plus, Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import Modal from './Modal'; // <-- NEW IMPORT: Modal component
 
-// --- Helper Icon Component ---
 const TriangleIcon = () => (
   <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-4">
     <path
@@ -12,8 +12,6 @@ const TriangleIcon = () => (
   </svg>
 );
 
-// --- BoardCard Component (moved into HomePage's scope or separate file) ---
-// For simplicity, defining it here. In a larger app, you might make it its own file.
 const BoardCard = ({ board, onBoardClick }) => (
   <div className="flex flex-col gap-3 pb-3 cursor-pointer group relative">
     <div
@@ -23,7 +21,7 @@ const BoardCard = ({ board, onBoardClick }) => (
           ? `url("${board.thumbnail}")`
           : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
       }}
-      onClick={() => onBoardClick(board.id)} // Use prop handler
+      onClick={() => onBoardClick(board.id)}
     >
       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-xl transition-all duration-200 flex items-end p-3">
         <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-200">
@@ -35,11 +33,11 @@ const BoardCard = ({ board, onBoardClick }) => (
     </div>
 
     <div className="flex justify-between items-start">
-      <div className="flex-1" onClick={() => onBoardClick(board.id)}> {/* Use prop handler */}
+      <div className="flex-1" onClick={() => onBoardClick(board.id)}>
         <p className="text-white text-base font-medium leading-normal group-hover:text-blue-300 transition-colors">
-          {board.title || board.name} {/* Use board.title from backend or board.name from mock */}
+          {board.title || board.name}
         </p>
-        {board.description && ( // Description might not come from backend
+        {board.description && (
           <p className="text-slate-400 text-sm mt-1 truncate">
             {board.description}
           </p>
@@ -49,40 +47,55 @@ const BoardCard = ({ board, onBoardClick }) => (
   </div>
 );
 
-
-// --- HomePage Component ---
 const HomePage = ({
   user,
-  boards, // These boards come from App.jsx's state
-  handleSelectBoard, // Handler to view a specific board
-  handleCreateBoard, // Handler to create a new board
-  newBoardName, // Input value for new board name
-  setNewBoardName, // Setter for new board name input
-  handleLogout, // Logout handler
-  error // Error state from App.jsx
+  boards,
+  handleSelectBoard,
+  handleCreateBoard,
+  newBoardName,
+  setNewBoardName,
+  handleLogout,
+  error,
+  setError
 }) => {
-  const [searchQuery, setSearchQuery] = useState(''); // Global search (header)
-  const [boardSearchQuery, setBoardSearchQuery] = useState(''); // Board-specific search
+  const [searchQuery, setSearchQuery] = useState('');
+  const [boardSearchQuery, setBoardSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('saved');
+  const [isNewBoardModalOpen, setIsNewBoardModalOpen] = useState(false); // <-- NEW STATE for modal
 
-  // We'll simulate shared boards for now, or fetch from backend later if implemented
-  const mockSharedBoards = [
-    // This could be fetched from backend eventually
-    // { id: '4', title: 'Shared Project Alpha', description: 'Shared by team.', thumbnail: null, updatedAt: '2025-07-14T11:00:00Z' },
-  ];
+  const mockSharedBoards = [];
   const [sharedBoards, setSharedBoards] = useState(mockSharedBoards);
 
-
-  // Filter boards based on search query
   const getFilteredBoards = () => {
-    const currentBoards = activeTab === 'saved' ? boards : sharedBoards; // Use props.boards
+    const currentBoards = activeTab === 'saved' ? boards : sharedBoards;
     return currentBoards.filter(board =>
-      (board.title && board.title.toLowerCase().includes(boardSearchQuery.toLowerCase())) || // Use board.title
+      (board.title && board.title.toLowerCase().includes(boardSearchQuery.toLowerCase())) ||
       (board.description && board.description.toLowerCase().includes(boardSearchQuery.toLowerCase()))
     );
   };
 
-  const filteredBoards = getFilteredBoards(); // Call this here
+  const filteredBoards = getFilteredBoards();
+
+  const handleNewBoardInputChange = (e) => {
+    setNewBoardName(e.target.value);
+    if (error) {
+      setError(null); // Clear error when user types
+    }
+  };
+
+  // NEW: Handler for creating board from modal
+  const onCreateBoardFromModal = async () => {
+    // This calls the handleCreateBoard from App.jsx
+    // App.jsx will handle validation and API call
+    try {
+        await handleCreateBoard(); // This handles creating, setting boards state in App.jsx
+        setIsNewBoardModalOpen(false); // Close modal on success
+        setNewBoardName(''); // Clear input after successful creation
+    } catch (err) {
+        // Error is already set in App.jsx, nothing more to do here.
+        // It will be displayed by the error prop.
+    }
+  };
 
 
   return (
@@ -96,7 +109,6 @@ const HomePage = ({
               <h2 className="text-white text-lg font-bold leading-tight tracking-wide">LUMO</h2>
             </div>
             <nav className="flex items-center gap-9">
-              {/* Existing Nav Links */}
               <a className="text-white text-sm font-medium leading-normal hover:text-blue-300 transition-colors" href="#">Home</a>
               <a className="text-white text-sm font-medium leading-normal hover:text-blue-300 transition-colors" href="#">Templates</a>
               <a className="text-white text-sm font-medium leading-normal hover:text-blue-300 transition-colors" href="#">Inspiration</a>
@@ -104,7 +116,6 @@ const HomePage = ({
             </nav>
           </div>
           <div className="flex flex-1 justify-end gap-8">
-            {/* Header Search */}
             <div className="flex flex-col min-w-40 h-10 max-w-64">
               <div className="flex w-full flex-1 items-stretch rounded-xl h-full">
                 <div className="text-slate-400 flex border-none bg-slate-700 items-center justify-center pl-4 rounded-l-xl border-r-0">
@@ -123,13 +134,12 @@ const HomePage = ({
               <HelpCircle size={20} />
             </button>
 
-            {/* User Profile & Logout */}
             <div className="flex items-center gap-2">
               <p className="text-white text-sm font-medium leading-normal">
                 {user?.name || user?.email || 'Guest'}
               </p>
               <button
-                onClick={handleLogout} // Use prop handler
+                onClick={handleLogout}
                 className="flex items-center gap-2 bg-slate-700 text-white px-3 py-2 rounded-lg text-sm hover:bg-slate-600 transition-colors"
               >
                 Logout
@@ -154,9 +164,10 @@ const HomePage = ({
               <p className="text-white tracking-tight text-3xl font-bold leading-tight min-w-72">
                 Your boards
               </p>
+              {/* Button to open New Board Modal */}
               <button
                 className="flex min-w-[84px] max-w-[480px] cursor-pointer items-center justify-center overflow-hidden rounded-full h-8 px-4 bg-slate-700 text-white text-sm font-medium leading-normal hover:bg-slate-600 transition-colors"
-                onClick={handleCreateBoard} // Use prop handler
+                onClick={() => setIsNewBoardModalOpen(true)} // Open modal on click
               >
                 <Plus size={16} className="mr-1" />
                 <span className="truncate">New board</span>
@@ -217,7 +228,7 @@ const HomePage = ({
                   <BoardCard
                     key={board.id}
                     board={board}
-                    onBoardClick={handleSelectBoard} // Pass the prop handler here
+                    onBoardClick={handleSelectBoard}
                   />
                 ))
               ) : (
@@ -238,7 +249,7 @@ const HomePage = ({
                   {!boardSearchQuery && (
                     <button
                       className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                      onClick={handleCreateBoard} // Use prop handler
+                      onClick={() => setIsNewBoardModalOpen(true)} // Open modal from here too
                     >
                       <Plus size={16} />
                       Create your first board
@@ -250,6 +261,52 @@ const HomePage = ({
           </div>
         </div>
       </div>
+
+      {/* NEW: New Board Modal */}
+      <Modal
+        isOpen={isNewBoardModalOpen}
+        onClose={() => {
+            setIsNewBoardModalOpen(false);
+            setNewBoardName(''); // Clear input when modal closes
+            setError(null); // Clear error when modal closes
+        }}
+        title="Create New Board"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <label htmlFor="newBoardNameInput" style={{ fontSize: '1em', color: '#cbd5e1' }}>Board Name:</label>
+          <input
+            id="newBoardNameInput"
+            type="text"
+            value={newBoardName}
+            onChange={handleNewBoardInputChange}
+            placeholder="e.g., Project Brainstorm"
+            style={{
+              padding: '10px',
+              borderRadius: '5px',
+              border: '1px solid #475569',
+              backgroundColor: '#334155',
+              color: 'white',
+              fontSize: '1em',
+            }}
+          />
+          {error && <p style={{ color: 'red', fontSize: '0.9em' }}>{error}</p>}
+          <button
+            onClick={onCreateBoardFromModal}
+            style={{
+              padding: '10px 15px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '1em',
+              marginTop: '10px',
+            }}
+          >
+            Create Board
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };
