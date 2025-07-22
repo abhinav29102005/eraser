@@ -91,9 +91,9 @@ https://github.com/abhinav29102005/eraser-backend.
 
 Installation and Repository Cloning:
 
-git clone https://github.com/abhinav29102005/eraser-frontend.git
+git clone https://github.com/abhinav29102005/eraser.git
 
-cd eraser-frontend
+cd eraser
 
 
 Dependency Installation:
