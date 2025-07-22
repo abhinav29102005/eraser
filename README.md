@@ -1,10 +1,16 @@
 ✍️ Eraser - Frontend (V1)
+
+
 This document outlines the architecture and functionality of the frontend component for Eraser, a collaborative whiteboard application designed to facilitate creative and collaborative endeavors.
 
 This repository hosts the client-side application for Eraser, developed utilizing contemporary web technologies. This inaugural V1 release establishes a robust foundation encompassing user authentication, comprehensive board management, and persistent drawing capabilities, thereby providing the essential groundwork for the subsequent integration of real-time collaboration features in V2.
 
+
 ✨ Features – Version 1 (Frontend)
+
 The initial version of the Eraser frontend incorporates the following fundamental functionalities:
+
+
 
 User Authentication:
 
@@ -15,6 +21,8 @@ Implementation of secure JSON Web Token (JWT) handling for all authenticated API
 Management of user sessions, including login and logout procedures.
 
 Display of authenticated user profile details.
+
+
 
 Board Management:
 
@@ -40,6 +48,8 @@ Canvas Reset Functionality: A "Clear" control designed to permanently erase all 
 
 Automatic loading of previously saved strokes upon accessing a board.
 
+
+
 📦 Technologies Employed
 
 React.js: A declarative, component-based JavaScript library extensively utilized for constructing user interfaces.
@@ -58,68 +68,100 @@ Tailwind CSS: A utility-first CSS framework employed for the expedited developme
 
 
 
+
+
 🚀 Operational Procedures
+
 To initiate and operate the Eraser frontend locally, the following procedural steps are required:
 
 
+
 Prerequisites
+
 Node.js (version 18 or higher) and npm must be installed on the host machine.
 
 
 
-The Eraser Backend component is required to be operational locally, typically accessible at http://localhost:5000. Detailed setup instructions are available in the Eraser Backend Repository https://github.com/abhinav29102005/eraser-backend.
+The Eraser Backend component is required to be operational locally, typically accessible at http://localhost:5000. Detailed setup instructions are available in the Eraser Backend Repository 
+
+https://github.com/abhinav29102005/eraser-backend.
 
 
-Installation
-Repository Cloning:
+
+
+Installation and Repository Cloning:
 
 git clone https://github.com/abhinav29102005/eraser-frontend.git
+
 cd eraser-frontend
+
 
 Dependency Installation:
 
 npm install
 
 Environment Variable Configuration:
+
 A .env file must be created in the root directory of the frontend project (eraser-frontend/.env), containing the backend API URL:
-
 VITE_API_URL=http://localhost:5000
-
 Verification of this URL against the operational backend port is essential.
-
 Application Execution
+
 Development Server Initiation:
 
 npm run dev
 
 The application typically becomes accessible in a web browser at http://localhost:5173/.
 
+
+
 📂 Project Structure (Frontend)
+
 eraser-frontend/
 ├── public/
+
 ├── src/
+
 │   ├── api/
-│   │   └── axiosInstance.js    # Configured Axios instance with interceptors
+
+│   │   └── axiosInstance.js # Configured Axios instance with interceptors
+
 │   ├── components/
+
 │   │   ├── BoardCanvas.jsx     # Wrapper component for the drawing board view
+
 │   │   ├── KonvaDrawingBoard.jsx # The core React-Konva drawing component
+
 │   │   ├── HomePage.jsx        # The dashboard/board listing user interface
+
 │   │   └── Modal.jsx           # Generic modal component implementation
+
 │   ├── services/
+
 │   │   ├── authService.js      # Functions dedicated to authentication API interactions
+
 │   │   └── boardService.js     # Functions dedicated to board and stroke API interactions
+
 │   ├── App.jsx                 # Primary application component, responsible for routing and state management
+
 │   ├── main.jsx                # React application entry point
+
 │   └── index.css               # Global Cascading Style Sheets (CSS), including Tailwind directives and foundational resets
+
 ├── .env                        # Environment variables for local deployment
+
 ├── .env.example                # Illustrative example of the .env file structure
+
 ├── package.json                # Project dependencies and operational scripts
+
 ├── tailwind.config.js          # Tailwind CSS configuration file
+
 └── postcss.config.js           # PostCSS configuration file
 
 
 
 🔮 Prospective Enhancements (V2)
+
 The forthcoming major version (V2) of Eraser is projected to integrate real-time collaborative drawing capabilities. This enhancement will necessitate the incorporation of:
 Yjs: A robust framework designed for real-time collaborative editing.
 WebSockets: For establishing efficient, bidirectional communication channels between client and server components.
@@ -127,4 +169,5 @@ WebSockets: For establishing efficient, bidirectional communication channels bet
 
 
 🤝 Collaboration Guidelines
+
 Contributions to this project are encouraged. For suggestions or to report identified issues, please submit an issue through the designated https://github.com/MicrosoftStudentChapter/eraser
