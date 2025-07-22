@@ -60,13 +60,18 @@ function KonvaDrawingBoard({ initialStrokes, onSaveStroke, onSaveAllBoardContent
     setIsDrawing(true);
     const stage = e.target.getStage();
     const pos = stage.getPointerPosition();
+
+    //convert screen coordinates into stage coordinates
+    const transform = stage.getAbsoluteTransform().copy();
+    transform.invert();
+    const relativePos = transform.point(pos);
     setLines((prevLines) => [
       ...prevLines,
       {
         tool,
         color: tool === "eraser" ? "black" : DEFAULT_STROKE_COLOR,
         strokeWidth: tool === "eraser" ? ERASER_STROKE_WIDTH : DEFAULT_STROKE_WIDTH,
-        points: [pos.x, pos.y],
+        points: [relativePos.x, relativePos.y],
         id: Date.now() + Math.random(),
       },
     ]);
@@ -76,9 +81,15 @@ function KonvaDrawingBoard({ initialStrokes, onSaveStroke, onSaveAllBoardContent
     if (!isDrawing || tool === "pan" || tool === "pointer") return;
     const stage = stageRef.current;
     const point = stage.getPointerPosition();
+
+    //convert screen coordinates into stage coordinates
+    const transform = stage.getAbsoluteTransform().copy();
+    transform.invert();
+    const relativePos = transform.point(point);
+
     setLines((prevLines) => {
       const lastLine = { ...prevLines[prevLines.length - 1] };
-      lastLine.points = lastLine.points.concat([point.x, point.y]);
+      lastLine.points = lastLine.points.concat([relativePos.x, relativePos.y]);
       const newLines = [...prevLines];
       newLines[newLines.length - 1] = lastLine;
       return newLines;
