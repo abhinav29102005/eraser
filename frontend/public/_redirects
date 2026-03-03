@@ -1,0 +1,2 @@
+# SPA fallback for dynamic editor routes: /editor/<roomId> → /editor.html
+/editor/* /editor.html 200

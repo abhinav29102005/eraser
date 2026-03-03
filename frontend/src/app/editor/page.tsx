@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useWhiteboardStore } from '@store/whiteboard';
 import { roomAPI, aiAPI } from '@lib/services';
@@ -56,8 +56,15 @@ function ToolIcon({ tool, className = 'w-4 h-4' }: { tool: string; className?: s
 /* ================================================================ */
 export default function EditorPage() {
   const router = useRouter();
-  const params = useParams();
-  const roomId = params.id as string;
+  const [roomId, setRoomId] = useState('');
+
+  /* Extract room ID from URL pathname: /editor/<roomId> */
+  useEffect(() => {
+    const segments = window.location.pathname.split('/');
+    const id = segments[2]; // /editor/<id>
+    if (!id) { router.push('/dashboard'); return; }
+    setRoomId(id);
+  }, [router]);
 
   const {
     elements, selectedTool, selectedColor, strokeWidth, zoom, panX, panY, selectedIds,
@@ -75,6 +82,7 @@ export default function EditorPage() {
 
   /* ─── Load room data ─── */
   useEffect(() => {
+    if (!roomId) return;
     const token = localStorage.getItem('authToken');
     if (!token) { router.push('/login'); return; }
 
@@ -157,6 +165,15 @@ export default function EditorPage() {
     line: 'crosshair', arrow: 'crosshair', rect: 'crosshair', ellipse: 'crosshair',
     diamond: 'crosshair', text: 'text',
   };
+
+  /* Wait for roomId to be resolved from the URL */
+  if (!roomId) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-surface-950">
+        <div className="animate-spin h-8 w-8 border-2 border-brand-500 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen flex flex-col bg-surface-950 overflow-hidden">
