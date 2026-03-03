@@ -26,7 +26,12 @@ app = FastAPI(title="LUMO API", version="1.0.0")
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "https://eraser-eb0.pages.dev",
+        "https://lumo.bigboyaks.me",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
