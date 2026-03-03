@@ -1,7 +1,6 @@
 import os
 import time
 import json
-import asyncio
 import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +11,7 @@ import aiohttp
 from app.routes import auth, rooms, ai
 from app.database import SessionLocal, Room, User
 
-logger = logging.getLogger("lumo.keepalive")
+logger = logging.getLogger("lumo")
 
 # Socket.IO setup
 sio = AsyncServer(
@@ -63,43 +62,6 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy"}
-
-
-# ── Keep-alive bot ──────────────────────────────────────────────
-# Pings our own /health endpoint every KEEP_ALIVE_INTERVAL seconds
-# so Render's free tier never spins the service down.
-KEEP_ALIVE_URL = os.getenv("KEEP_ALIVE_URL", "")        # e.g. https://lumo-api.onrender.com/health
-KEEP_ALIVE_INTERVAL = int(os.getenv("KEEP_ALIVE_INTERVAL", "600"))  # default 10 min
-
-_keep_alive_task: asyncio.Task | None = None
-
-
-async def _keep_alive_loop():
-    """Background loop that pings the service to prevent idle shutdown."""
-    if not KEEP_ALIVE_URL:
-        logger.info("KEEP_ALIVE_URL not set – keep-alive bot disabled (set it in env for production)")
-        return
-    logger.info(f"Keep-alive bot started → pinging {KEEP_ALIVE_URL} every {KEEP_ALIVE_INTERVAL}s")
-    async with aiohttp.ClientSession() as session:
-        while True:
-            await asyncio.sleep(KEEP_ALIVE_INTERVAL)
-            try:
-                async with session.get(KEEP_ALIVE_URL, timeout=aiohttp.ClientTimeout(total=15)) as resp:
-                    logger.info(f"Keep-alive ping → {resp.status}")
-            except Exception as exc:
-                logger.warning(f"Keep-alive ping failed: {exc}")
-
-
-@app.on_event("startup")
-async def _start_keep_alive():
-    global _keep_alive_task
-    _keep_alive_task = asyncio.create_task(_keep_alive_loop())
-
-
-@app.on_event("shutdown")
-async def _stop_keep_alive():
-    if _keep_alive_task and not _keep_alive_task.done():
-        _keep_alive_task.cancel()
 
 
 # Socket.IO events

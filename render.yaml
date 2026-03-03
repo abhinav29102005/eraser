@@ -39,8 +39,4 @@ services:
         value: "3.11"
       - key: PORT
         value: "10000"
-      - key: KEEP_ALIVE_URL
-        value: "https://lumo-api.onrender.com/health"
-      - key: KEEP_ALIVE_INTERVAL
-        value: "600"
     healthCheckPath: /health
