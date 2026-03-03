@@ -17,7 +17,7 @@ databases:
 
 services:
   - type: web
-    name: lumo-api
+    name: lumo-api-mlsc
     runtime: docker
     repo: https://github.com/abhinav29102005/eraser
     rootDir: backend
