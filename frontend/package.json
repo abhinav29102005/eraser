@@ -1,0 +1,35 @@
+{
+  "name": "lumo-frontend",
+  "version": "1.0.0",
+  "description": "Real-time collaborative whiteboarding app - Frontend",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "^14.0.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "socket.io-client": "^4.7.0",
+    "konva": "^9.2.0",
+    "react-konva": "^18.2.10",
+    "zustand": "^4.4.0",
+    "axios": "^1.6.0",
+    "react-hot-toast": "^2.4.1",
+    "tailwindcss": "^3.3.0",
+    "next-auth": "^4.24.0",
+    "openai": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.3.0",
+    "autoprefixer": "^10.4.16",
+    "postcss": "^8.4.31"
+  }
+}

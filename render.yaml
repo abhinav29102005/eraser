@@ -1,0 +1,46 @@
+# ─── Render Blueprint ───
+# Deploy with: https://dashboard.render.com/blueprints → New Blueprint Instance → connect this repo
+#
+# Free tier includes:
+#   • 1 Web Service (750 hrs/month — always free)
+#   • 1 PostgreSQL database (free for 90 days, then $7/mo for Starter)
+#
+# After deploy, set these env vars in Render dashboard if not using this file:
+#   DATABASE_URL        → auto-set from the Render PostgreSQL
+#   SECRET_KEY          → generate a random 64-char string
+#   OPENAI_API_KEY      → your key (or leave empty + set AI_PROVIDER=mock)
+
+databases:
+  - name: lumo-db
+    plan: free            # Free for 90 days
+    databaseName: lumo_db
+    user: lumo
+
+services:
+  - type: web
+    name: lumo-api
+    runtime: docker
+    repo: https://github.com/YOUR_USERNAME/lumo   # ← change this
+    rootDir: backend
+    plan: free
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: lumo-db
+          property: connectionURI
+      - key: SECRET_KEY
+        generateValue: true
+      - key: AI_PROVIDER
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false          # you'll paste this in the dashboard
+      - key: PYTHON_VERSION
+        value: "3.11"
+      - key: PORT
+        value: "10000"
+      - key: KEEP_ALIVE_URL
+        value: "https://lumo-api.onrender.com/health"
+      - key: KEEP_ALIVE_INTERVAL
+        value: "600"
+    healthCheckPath: /health
