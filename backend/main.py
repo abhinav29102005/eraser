@@ -69,6 +69,36 @@ async def health():
     return {"status": "healthy"}
 
 
+@app.get("/db-status")
+async def db_status():
+    """Check database connection and tables"""
+    from app.database import engine, Base
+    from sqlalchemy import inspect, text
+    
+    try:
+        # Test connection
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT 1"))
+            result.fetchone()
+        
+        # Check tables
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        
+        return {
+            "status": "connected",
+            "database_url": engine.url.render_as_string(hide_password=True),
+            "tables": tables,
+            "expected_tables": ["users", "rooms", "drawing_objects", "ai_prompts", "room_users"]
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "error": str(e),
+            "database_url": engine.url.render_as_string(hide_password=True)
+        }
+
+
 # Socket.IO events
 @sio.event
 async def connect(sid, environ):
