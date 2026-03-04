@@ -58,10 +58,10 @@ export default function EditorPage() {
   const router = useRouter();
   const [roomId, setRoomId] = useState('');
 
-  /* Extract room ID from URL pathname: /editor/<roomId> */
+  /* Extract room ID from URL query string: /editor?room=<roomId> */
   useEffect(() => {
-    const segments = window.location.pathname.split('/');
-    const id = segments[2]; // /editor/<id>
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('room');
     if (!id) { router.push('/dashboard'); return; }
     setRoomId(id);
   }, [router]);

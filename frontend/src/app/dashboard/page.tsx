@@ -159,7 +159,7 @@ export default function DashboardPage() {
                   {rooms.slice(0, 8).map((room) => (
                     <Link
                       key={room.id}
-                      href={`/editor/${room.id}`}
+                      href={`/editor?room=${room.id}`}
                       className="w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md text-surface-400 hover:text-surface-200 hover:bg-surface-800/60 text-sm transition-colors truncate"
                     >
                       <svg className="w-3.5 h-3.5 flex-shrink-0 text-surface-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -295,7 +295,7 @@ export default function DashboardPage() {
               {filteredRooms.map((room) => (
                 <div key={room.id} className="card-hover group flex flex-col overflow-hidden">
                   {/* Preview */}
-                  <Link href={`/editor/${room.id}`} className="block h-36 bg-surface-800/50 border-b border-surface-700/40 relative overflow-hidden">
+                  <Link href={`/editor?room=${room.id}`} className="block h-36 bg-surface-800/50 border-b border-surface-700/40 relative overflow-hidden">
                     <div className="absolute inset-0 flex items-center justify-center">
                       <div className="flex items-center gap-2 opacity-30 group-hover:opacity-50 transition-opacity">
                         {['A', 'B', 'C'].map((l) => (
@@ -316,7 +316,7 @@ export default function DashboardPage() {
                   </Link>
                   {/* Info */}
                   <div className="p-3">
-                    <Link href={`/editor/${room.id}`} className="block">
+                    <Link href={`/editor?room=${room.id}`} className="block">
                       <h3 className="text-sm font-medium text-surface-200 truncate group-hover:text-white transition-colors">{room.name}</h3>
                       <p className="text-xs text-surface-500 mt-0.5">{formatDate(room.createdAt)}</p>
                     </Link>
@@ -339,12 +339,12 @@ export default function DashboardPage() {
                   {filteredRooms.map((room) => (
                     <tr key={room.id} className="border-b border-surface-700/30 last:border-0 hover:bg-surface-800/40 transition-colors">
                       <td className="px-4 py-3">
-                        <Link href={`/editor/${room.id}`} className="text-surface-200 hover:text-white font-medium transition-colors">{room.name}</Link>
+                        <Link href={`/editor?room=${room.id}`} className="text-surface-200 hover:text-white font-medium transition-colors">{room.name}</Link>
                       </td>
                       <td className="px-4 py-3 text-surface-500">{formatDate(room.createdAt)}</td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Link href={`/editor/${room.id}`} className="text-brand-400 hover:text-brand-300 text-xs font-medium transition-colors">Open</Link>
+                          <Link href={`/editor?room=${room.id}`} className="text-brand-400 hover:text-brand-300 text-xs font-medium transition-colors">Open</Link>
                           <button onClick={() => handleDeleteRoom(room.id)} className="text-surface-500 hover:text-red-400 text-xs font-medium transition-colors">Delete</button>
                         </div>
                       </td>
