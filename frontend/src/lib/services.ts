@@ -47,6 +47,9 @@ export const aiAPI = {
   generateDiagram: (prompt: string) =>
     api.post('/ai/diagram', { prompt }),
 
+  generateDiagramVisual: (prompt: string) =>
+    api.post('/ai/diagram-visual', { prompt }),
+
   analyzeImage: (imageUrl: string) =>
     api.post('/ai/analyze', { imageUrl }),
 

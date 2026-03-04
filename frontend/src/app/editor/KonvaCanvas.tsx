@@ -1,11 +1,52 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text as KText, Transformer } from 'react-konva';
+import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text as KText, Image as KImage, Transformer } from 'react-konva';
 import Konva from 'konva';
 import { useWhiteboardStore } from '@store/whiteboard';
 import { roomAPI } from '@lib/services';
 import type { CanvasElement, ShapeObject } from '@app-types/index';
+
+/* ── Hook: load an HTMLImageElement from a data-URI or URL ── */
+function useImage(src: string | undefined): HTMLImageElement | null {
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    if (!src) { setImg(null); return; }
+    const image = new window.Image();
+    image.onload = () => setImg(image);
+    image.onerror = () => setImg(null);
+    image.src = src;
+  }, [src]);
+  return img;
+}
+
+/* ── Component: renders a single SVG image element on canvas ── */
+function SvgImageNode({ el, selectedTool, setSelectedIds }: {
+  el: Extract<CanvasElement, { kind: 'shape' }>;
+  selectedTool: string;
+  setSelectedIds: (ids: string[]) => void;
+}) {
+  const img = useImage(el.src);
+  if (!img) return null;
+  return (
+    <KImage
+      key={el.id}
+      id={el.id}
+      image={img}
+      x={el.x}
+      y={el.y}
+      width={el.width || img.naturalWidth}
+      height={el.height || img.naturalHeight}
+      opacity={el.opacity}
+      rotation={el.rotation}
+      draggable={selectedTool === 'select'}
+      onClick={() => { if (selectedTool === 'select') setSelectedIds([el.id]); }}
+      onDragEnd={(e) => {
+        useWhiteboardStore.getState().updateElement(el.id, { x: e.target.x(), y: e.target.y() } as any);
+      }}
+    />
+  );
+}
 
 function uid() {
   return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -207,6 +248,15 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
               const val = prompt('Edit text:', t.text());
               if (val !== null) useWhiteboardStore.getState().updateElement(s.id, { text: val } as any);
             }}
+          />
+        );
+      case 'image':
+        return (
+          <SvgImageNode
+            key={s.id}
+            el={s as any}
+            selectedTool={selectedTool}
+            setSelectedIds={setSelectedIds}
           />
         );
       default: return null;

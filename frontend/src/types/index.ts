@@ -92,3 +92,13 @@ export interface AIPrompt {
   result: string;
   timestamp: number;
 }
+
+export interface AIDiagramSVGResult {
+  id: string;
+  prompt: string;
+  svg: string;
+  message: string;
+  width: number;
+  height: number;
+  timestamp: number;
+}
