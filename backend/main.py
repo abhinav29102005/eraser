@@ -151,7 +151,7 @@ async def join_room(sid, data):
                     'color': obj.color,
                     'strokeWidth': obj.stroke_width,
                 }
-                for obj in room.drawing_objects
+                for obj in room.objects
             ]
             await sio.emit('room_data', {'objects': objects_data}, to=sid)
     finally:

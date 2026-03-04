@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db, AIPrompt, Room
-from app.schemas import AIPromptRequest, AIPromptResponse
+from app.schemas import AIPromptRequest, AIPromptResponse, AIDiagramSVGResponse
 from app.security import get_current_user
-from app.ai_service import generate_diagram, analyze_sketch, suggest_edits
+from app.ai_service import generate_diagram, analyze_sketch, suggest_edits, generate_diagram_svg
 import time
 
 router = APIRouter(prefix="/ai", tags=["ai"])
@@ -92,6 +92,43 @@ async def suggest_edits_endpoint(
         db.refresh(ai_prompt)
         
         return ai_prompt
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/diagram-visual", response_model=AIDiagramSVGResponse)
+async def generate_diagram_visual_endpoint(
+    request: AIPromptRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Generate an SVG vector diagram and a humanized message."""
+    try:
+        data = await generate_diagram_svg(request.prompt)
+
+        # Save to database
+        ai_prompt = AIPrompt(
+            user_id=user_id,
+            prompt=request.prompt,
+            result=data["svg"],
+            timestamp=int(time.time())
+        )
+        db.add(ai_prompt)
+        db.commit()
+        db.refresh(ai_prompt)
+
+        return {
+            "id": ai_prompt.id,
+            "prompt": request.prompt,
+            "svg": data["svg"],
+            "message": data["message"],
+            "width": data["width"],
+            "height": data["height"],
+            "timestamp": ai_prompt.timestamp,
+        }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

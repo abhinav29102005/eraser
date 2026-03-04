@@ -68,3 +68,28 @@ class AIPromptResponse(BaseModel):
     prompt: str
     result: str
     timestamp: int
+
+
+class AIDiagramSVGResponse(BaseModel):
+    id: str
+    prompt: str
+    svg: str
+    message: str
+    width: int
+    height: int
+    timestamp: int
+
+
+class CanvasSaveObject(BaseModel):
+    type: str
+    x: float
+    y: float
+    data: dict
+    color: Optional[str] = None
+    stroke_width: Optional[float] = None
+    user_id: Optional[str] = None
+    timestamp: Optional[int] = None
+
+
+class CanvasSaveRequest(BaseModel):
+    objects: List[CanvasSaveObject] = []

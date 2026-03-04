@@ -55,6 +55,104 @@ def _mock_diagram(prompt: str) -> str:
     )
 
 
+def _humanize_response(prompt: str, extra: str = "") -> str:
+    """Wrap AI output in a warm, conversational tone."""
+    import random
+    openers = [
+        f"Hey! I've put together a visual for \"{ prompt[:60] }\" — here's what I came up with.",
+        f"Great idea! I sketched out \"{ prompt[:60] }\" for you. Take a look and tweak as you like.",
+        f"Here you go! I turned \"{ prompt[:60] }\" into a diagram. Feel free to move things around.",
+        f"Nice prompt! I whipped up a visual of \"{ prompt[:60] }\". Hope it captures what you had in mind!",
+        f"Alright, I gave \"{ prompt[:60] }\" my best shot — the diagram is on your canvas now.",
+    ]
+    tips = [
+        "💡 Tip: You can drag and resize the image once it's on the canvas.",
+        "💡 Tip: Try zooming in to check the finer details.",
+        "💡 Tip: Pair this diagram with labels using the Text tool.",
+        "💡 Tip: Use the document panel to annotate what each part means.",
+    ]
+    parts = [random.choice(openers)]
+    if extra:
+        parts.append(extra)
+    parts.append(random.choice(tips))
+    return "\n\n".join(parts)
+
+
+def _build_mock_svg(prompt: str) -> str:
+    """Generate a nice mock SVG diagram from the prompt."""
+    import hashlib
+    h = hashlib.md5(prompt.encode()).hexdigest()
+    # Derive stable colours from the hash
+    c1 = f"#{h[0:6]}"
+    c2 = f"#{h[6:12]}"
+    c3 = f"#{h[12:18]}"
+
+    words = prompt.split()
+    # Build up to 5 labelled boxes from prompt keywords
+    boxes = []
+    keywords = [w.strip(",.!?") for w in words if len(w) > 2][:5]
+    if len(keywords) < 2:
+        keywords = ["Service A", "Service B", "Database"]
+
+    cols = min(len(keywords), 3)
+    box_w, box_h, gap_x, gap_y = 150, 60, 40, 80
+    start_x, start_y = 30, 30
+    svg_items = []
+    positions = []
+
+    for i, kw in enumerate(keywords):
+        row = i // cols
+        col = i % cols
+        x = start_x + col * (box_w + gap_x)
+        y = start_y + row * (box_h + gap_y)
+        positions.append((x, y, kw))
+        rx = 12
+        fills = [c1, c2, c3]
+        fill = fills[i % len(fills)]
+        svg_items.append(
+            f'<rect x="{x}" y="{y}" width="{box_w}" height="{box_h}" rx="{rx}" '
+            f'fill="{fill}" fill-opacity="0.15" stroke="{fill}" stroke-width="2"/>'
+        )
+        svg_items.append(
+            f'<text x="{x + box_w // 2}" y="{y + box_h // 2 + 5}" '
+            f'text-anchor="middle" font-family="Inter,system-ui,sans-serif" '
+            f'font-size="13" font-weight="600" fill="{fill}">{kw.capitalize()}</text>'
+        )
+
+    # Draw arrows between consecutive boxes
+    for i in range(len(positions) - 1):
+        x1 = positions[i][0] + box_w
+        y1 = positions[i][1] + box_h // 2
+        x2 = positions[i + 1][0]
+        y2 = positions[i + 1][1] + box_h // 2
+        # If wrapping to next row, adjust
+        if positions[i + 1][0] <= positions[i][0]:
+            x1 = positions[i][0] + box_w // 2
+            y1 = positions[i][1] + box_h
+            x2 = positions[i + 1][0] + box_w // 2
+            y2 = positions[i + 1][1]
+        svg_items.append(
+            f'<line x1="{x1}" y1="{y1}" x2="{x2}" y2="{y2}" '
+            f'stroke="#94a3b8" stroke-width="2" marker-end="url(#arrow)"/>'
+        )
+
+    total_cols = min(len(keywords), cols)
+    total_rows = (len(keywords) + cols - 1) // cols
+    svg_w = start_x * 2 + total_cols * box_w + (total_cols - 1) * gap_x
+    svg_h = start_y * 2 + total_rows * box_h + (total_rows - 1) * gap_y
+
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_w}" height="{svg_h}" viewBox="0 0 {svg_w} {svg_h}">'
+        '<defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" '
+        'markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+        '<path d="M 0 0 L 10 5 L 0 10 z" fill="#94a3b8"/></marker></defs>'
+        '<rect width="100%" height="100%" fill="#1e1e2e" rx="16"/>'
+        + "".join(svg_items)
+        + "</svg>"
+    )
+    return svg
+
+
 def _mock_suggestions(content: str) -> str:
     return (
         "[FREE AI MODE]\n"
@@ -170,3 +268,73 @@ async def suggest_edits(content: str) -> str:
     except Exception as e:
         print(f"AI Error: {e}")
         return _mock_suggestions(content)
+
+
+async def generate_diagram_svg(prompt: str) -> dict:
+    """Generate an SVG vector diagram + humanized explanation.
+
+    Returns {"svg": "<svg …>", "message": "…", "width": int, "height": int}.
+    """
+    provider = _resolve_provider()
+    svg = ""
+    try:
+        if provider == "openai" and client:
+            response = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a vector-graphics expert. "
+                            "Return ONLY a valid SVG string (starting with <svg and ending with </svg>). "
+                            "Use a dark background (#1e1e2e), colourful rounded boxes for nodes, "
+                            "labelled arrows between them, and a clean modern style. "
+                            "Keep the viewBox under 800x600. Do NOT include any explanation text outside the SVG tags."
+                        ),
+                    },
+                    {
+                        "role": "user",
+                        "content": f"Create an SVG diagram for: {prompt}",
+                    },
+                ],
+                max_tokens=2000,
+            )
+            raw = response.choices[0].message.content or ""
+            # Extract the SVG portion
+            start = raw.find("<svg")
+            end = raw.rfind("</svg>")
+            if start != -1 and end != -1:
+                svg = raw[start : end + 6]
+
+        elif provider == "ollama":
+            raw = await _ollama_chat(
+                f"Create an SVG diagram for: {prompt}",
+                (
+                    "Return ONLY a valid SVG string (starting with <svg and ending with </svg>). "
+                    "Use a dark background (#1e1e2e), colourful rounded boxes for nodes, "
+                    "labelled arrows, modern style. Keep viewBox under 800x600."
+                ),
+            )
+            start = raw.find("<svg")
+            end = raw.rfind("</svg>")
+            if start != -1 and end != -1:
+                svg = raw[start : end + 6]
+    except Exception as e:
+        print(f"AI SVG Error: {e}")
+
+    # Fallback to deterministic mock SVG
+    if not svg or "<svg" not in svg:
+        svg = _build_mock_svg(prompt)
+
+    # Parse width/height from the SVG
+    w, h = 600, 400
+    import re
+    wm = re.search(r'width="(\d+)"', svg)
+    hm = re.search(r'height="(\d+)"', svg)
+    if wm:
+        w = int(wm.group(1))
+    if hm:
+        h = int(hm.group(1))
+
+    message = _humanize_response(prompt)
+    return {"svg": svg, "message": message, "width": w, "height": h}

@@ -51,7 +51,7 @@ class Room(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     
     users = relationship("User", secondary=room_users, back_populates="rooms")
-    drawing_objects = relationship("DrawingObject", back_populates="room", cascade="all, delete-orphan")
+    objects = relationship("DrawingObject", back_populates="room", cascade="all, delete-orphan")
 
 
 class DrawingObject(Base):
@@ -68,7 +68,7 @@ class DrawingObject(Base):
     stroke_width = Column(Float, nullable=True)
     timestamp = Column(Integer)
     
-    room = relationship("Room", back_populates="drawing_objects")
+    room = relationship("Room", back_populates="objects")
     user = relationship("User", back_populates="drawing_objects")
 
 

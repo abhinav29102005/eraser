@@ -1,11 +1,23 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db, Room, User, DrawingObject
-from app.schemas import RoomCreate, RoomResponse, DrawingObjectCreate, DrawingObject as DrawingObjectSchema
+from app.schemas import RoomCreate, RoomResponse, DrawingObjectCreate, DrawingObject as DrawingObjectSchema, CanvasSaveRequest
 from app.security import get_current_user
 import time
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+
+
+def _ensure_room_member(db: Session, room: Room, user_id: str):
+    """Auto-add an authenticated user to a room if they aren't already a member.
+    This enables the share-link flow: any logged-in user with the link can collaborate."""
+    member_ids = {u.id for u in room.users}
+    if user_id not in member_ids:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            room.users.append(user)
+            db.commit()
+            db.refresh(room)
 
 
 @router.post("/", response_model=RoomResponse)
@@ -52,10 +64,24 @@ async def get_room(
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
     
-    # Check if user is in room
-    if user_id not in [u.id for u in room.users]:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+    # Auto-join: any authenticated user with the link can access & collaborate
+    _ensure_room_member(db, room, user_id)
     
+    return room
+
+
+@router.post("/{room_id}/join", response_model=RoomResponse)
+async def join_room(
+    room_id: str,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Explicitly join a room (for share-link flow)."""
+    room = db.query(Room).filter(Room.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+    
+    _ensure_room_member(db, room, user_id)
     return room
 
 
@@ -172,3 +198,42 @@ async def delete_object(
     db.commit()
     
     return {"message": "Object deleted"}
+
+
+@router.put("/{room_id}/canvas")
+async def save_canvas(
+    room_id: str,
+    payload: CanvasSaveRequest,
+    user_id: str = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Bulk-save the full canvas state: deletes old objects then inserts the current set."""
+    room = db.query(Room).filter(Room.id == room_id).first()
+    if not room:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
+
+    _ensure_room_member(db, room, user_id)
+
+    # Remove old objects
+    db.query(DrawingObject).filter(DrawingObject.room_id == room_id).delete()
+
+    # Insert current objects
+    now = int(time.time())
+    for obj in payload.objects:
+        new_obj = DrawingObject(
+            room_id=room_id,
+            user_id=obj.user_id or user_id,
+            type=obj.type,
+            x=obj.x,
+            y=obj.y,
+            data=obj.data,
+            color=obj.color,
+            stroke_width=obj.stroke_width,
+            timestamp=obj.timestamp or now,
+        )
+        db.add(new_obj)
+
+    db.commit()
+    db.refresh(room)
+
+    return {"message": "Canvas saved", "count": len(payload.objects)}
