@@ -98,12 +98,12 @@ export default function EditorPage() {
         setRoomName(res.data.name);
         if (res.data.objects && Array.isArray(res.data.objects)) {
           const converted: CanvasElement[] = res.data.objects.map((obj: any) => {
-            if (obj.data?.points) {
+            if (obj.type === 'pen' || obj.type === 'eraser' || obj.data?.points) {
               return {
                 kind: 'stroke' as const,
                 id: obj.id,
-                tool: 'pen' as const,
-                points: obj.data.points,
+                tool: (obj.type === 'pen' || obj.type === 'eraser') ? obj.type : 'pen' as const,
+                points: obj.data?.points || [],
                 color: obj.color || '#ffffff',
                 strokeWidth: obj.stroke_width || 2,
                 opacity: 1,
@@ -118,6 +118,9 @@ export default function EditorPage() {
               x: obj.x || 0, y: obj.y || 0,
               width: obj.data?.width || 100,
               height: obj.data?.height || 100,
+              points: obj.data?.points,
+              text: obj.data?.text,
+              src: obj.data?.src,
               color: obj.color || '#ffffff',
               fill: obj.data?.fill || '',
               strokeWidth: obj.stroke_width || 2,
@@ -224,7 +227,45 @@ export default function EditorPage() {
     if (saving) return;
     setSaving(true);
     try {
+      // Save room name
       await roomAPI.update(roomId, { name: roomName });
+
+      // Bulk-save all canvas elements
+      const objectsPayload = elements.map((el) => {
+        if (el.kind === 'stroke') {
+          return {
+            type: el.tool,
+            x: 0,
+            y: 0,
+            data: { points: el.points },
+            color: el.color,
+            stroke_width: el.strokeWidth,
+            user_id: el.userId,
+            timestamp: el.timestamp,
+          };
+        }
+        const s = el as Extract<CanvasElement, { kind: 'shape' }>;
+        return {
+          type: s.type,
+          x: s.x,
+          y: s.y,
+          data: {
+            width: s.width,
+            height: s.height,
+            points: s.points,
+            text: s.text,
+            src: s.src,
+            fill: s.fill,
+          },
+          color: s.color,
+          stroke_width: s.strokeWidth,
+          user_id: s.userId,
+          timestamp: s.timestamp,
+        };
+      });
+
+      await roomAPI.saveCanvas(roomId, objectsPayload);
+
       setLastSaved(new Date());
       toast.success('Saved');
     } catch {
@@ -232,7 +273,7 @@ export default function EditorPage() {
     } finally {
       setSaving(false);
     }
-  }, [roomId, roomName, saving]);
+  }, [roomId, roomName, saving, elements]);
 
   /* ─── Ctrl+S shortcut ─── */
   useEffect(() => {

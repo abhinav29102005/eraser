@@ -33,6 +33,12 @@ export const roomAPI = {
   delete: (id: string) =>
     api.delete(`/rooms/${id}`),
 
+  join: (roomId: string) =>
+    api.post(`/rooms/${roomId}/join`),
+
+  saveCanvas: (roomId: string, objects: any[]) =>
+    api.put(`/rooms/${roomId}/canvas`, { objects }),
+
   addObject: (roomId: string, object: any) =>
     api.post(`/rooms/${roomId}/objects`, object),
 
