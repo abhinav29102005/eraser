@@ -4,6 +4,9 @@ from app.database import get_db, Room, User, DrawingObject
 from app.schemas import RoomCreate, RoomResponse, DrawingObjectCreate, DrawingObject as DrawingObjectSchema, CanvasSaveRequest
 from app.security import get_current_user
 import time
+import logging
+
+logger = logging.getLogger("lumo.rooms")
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -214,26 +217,31 @@ async def save_canvas(
 
     _ensure_room_member(db, room, user_id)
 
-    # Remove old objects
-    db.query(DrawingObject).filter(DrawingObject.room_id == room_id).delete()
+    try:
+        # Remove old objects
+        db.query(DrawingObject).filter(DrawingObject.room_id == room_id).delete(synchronize_session="fetch")
 
-    # Insert current objects
-    now = int(time.time())
-    for obj in payload.objects:
-        new_obj = DrawingObject(
-            room_id=room_id,
-            user_id=obj.user_id or user_id,
-            type=obj.type,
-            x=obj.x,
-            y=obj.y,
-            data=obj.data,
-            color=obj.color,
-            stroke_width=obj.stroke_width,
-            timestamp=obj.timestamp or now,
-        )
-        db.add(new_obj)
+        # Insert current objects
+        now = int(time.time())
+        for obj in payload.objects:
+            new_obj = DrawingObject(
+                room_id=room_id,
+                user_id=user_id,  # always use authenticated user to avoid FK violations
+                type=obj.type,
+                x=obj.x,
+                y=obj.y,
+                data=obj.data if obj.data is not None else {},
+                color=obj.color,
+                stroke_width=obj.stroke_width,
+                timestamp=obj.timestamp or now,
+            )
+            db.add(new_obj)
 
-    db.commit()
-    db.refresh(room)
+        db.commit()
+        db.refresh(room)
+    except Exception as e:
+        db.rollback()
+        logger.error("Canvas save failed for room %s: %s", room_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to save canvas: {str(e)}")
 
     return {"message": "Canvas saved", "count": len(payload.objects)}

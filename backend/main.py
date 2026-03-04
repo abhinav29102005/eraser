@@ -2,8 +2,10 @@ import os
 import time
 import json
 import logging
-from fastapi import FastAPI
+import traceback
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from socketio import AsyncServer
 from aiohttp import web
 import aiohttp
@@ -41,6 +43,22 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(rooms.router)
 app.include_router(ai.router)
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler so unhandled 500s still carry CORS headers."""
+    origin = request.headers.get("origin", "*")
+    logger.error("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
+    logger.error(traceback.format_exc())
+    return JSONResponse(
+        status_code=500,
+        content={"detail": str(exc) if os.getenv("DEBUG") else "Internal server error"},
+        headers={
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+        },
+    )
 
 # Store active connections
 active_rooms = {}
