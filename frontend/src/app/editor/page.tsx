@@ -227,49 +227,62 @@ export default function EditorPage() {
     if (saving) return;
     setSaving(true);
     try {
-      // Save room name
-      await roomAPI.update(roomId, { name: roomName });
+      // Helper: strip undefined/null keys so axios doesn't send JSON nulls
+      const clean = <T extends Record<string, unknown>>(obj: T): T => {
+        const out = {} as Record<string, unknown>;
+        for (const [k, v] of Object.entries(obj)) {
+          if (v !== undefined && v !== null) out[k] = v;
+        }
+        return out as T;
+      };
 
       // Bulk-save all canvas elements
       const objectsPayload = elements.map((el) => {
         if (el.kind === 'stroke') {
-          return {
+          return clean({
             type: el.tool,
             x: 0,
             y: 0,
             data: { points: el.points },
             color: el.color,
             stroke_width: el.strokeWidth,
-            user_id: el.userId,
             timestamp: el.timestamp,
-          };
+          });
         }
         const s = el as Extract<CanvasElement, { kind: 'shape' }>;
-        return {
+        return clean({
           type: s.type,
           x: s.x,
           y: s.y,
-          data: {
+          data: clean({
             width: s.width,
             height: s.height,
             points: s.points,
             text: s.text,
             src: s.src,
             fill: s.fill,
-          },
+          }),
           color: s.color,
           stroke_width: s.strokeWidth,
-          user_id: s.userId,
           timestamp: s.timestamp,
-        };
+        });
       });
 
-      await roomAPI.saveCanvas(roomId, objectsPayload);
+      // Run both saves concurrently – neither depends on the other
+      await Promise.all([
+        roomAPI.update(roomId, { name: roomName }),
+        roomAPI.saveCanvas(roomId, objectsPayload),
+      ]);
 
       setLastSaved(new Date());
       toast.success('Saved');
-    } catch {
-      toast.error('Failed to save');
+    } catch (err: unknown) {
+      const msg =
+        err && typeof err === 'object' && 'response' in err
+          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail ?? 'Unknown error'
+          : String(err);
+      console.error('Save failed:', err);
+      toast.error(`Failed to save: ${msg}`);
     } finally {
       setSaving(false);
     }
