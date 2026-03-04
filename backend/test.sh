@@ -295,7 +295,7 @@ if [ -n "$ROOM_ID" ]; then
     response=$(curl -s -w "\n%{http_code}" -X POST \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $TOKEN" \
-        -d "{\"type\":\"rectangle\",\"x\":100,\"y\":100,\"data\":\"{\\\"width\\\":50,\\\"height\\\":30}\",\"color\":\"#000000\",\"stroke_width\":2}" \
+        -d "{\"type\":\"rectangle\",\"x\":100,\"y\":100,\"data\":{\"width\":50,\"height\":30},\"color\":\"#000000\",\"stroke_width\":2}" \
         "$BASE_URL/rooms/$ROOM_ID/objects")
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')
@@ -318,7 +318,7 @@ if [ -n "$ROOM_ID" ] && [ -n "$OBJECT_ID" ]; then
     response=$(curl -s -w "\n%{http_code}" -X PUT \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $TOKEN" \
-        -d "{\"type\":\"rectangle\",\"x\":150,\"y\":150,\"data\":\"{\\\"width\\\":60,\\\"height\\\":40}\",\"color\":\"#FF0000\",\"stroke_width\":3}" \
+        -d "{\"type\":\"rectangle\",\"x\":150,\"y\":150,\"data\":{\"width\":60,\"height\":40},\"color\":\"#FF0000\",\"stroke_width\":3}" \
         "$BASE_URL/rooms/$ROOM_ID/objects/$OBJECT_ID")
     http_code=$(echo "$response" | tail -n1)
     body=$(echo "$response" | sed '$d')

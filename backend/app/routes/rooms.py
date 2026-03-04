@@ -115,7 +115,7 @@ async def add_object(
         data=obj.data,
         color=obj.color,
         stroke_width=obj.stroke_width,
-        timestamp=int(time.time() * 1000)
+        timestamp=int(time.time())
     )
     
     db.add(new_obj)

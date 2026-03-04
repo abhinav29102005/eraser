@@ -24,7 +24,7 @@ async def generate_diagram_endpoint(
             user_id=user_id,
             prompt=request.prompt,
             result=result,
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time())
         )
         
         db.add(ai_prompt)
@@ -54,7 +54,7 @@ async def analyze_sketch_endpoint(
             user_id=user_id,
             prompt=request.prompt,
             result=result,
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time())
         )
         
         db.add(ai_prompt)
@@ -84,7 +84,7 @@ async def suggest_edits_endpoint(
             user_id=user_id,
             prompt=request.prompt,
             result=result,
-            timestamp=int(time.time() * 1000)
+            timestamp=int(time.time())
         )
         
         db.add(ai_prompt)
