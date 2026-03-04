@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://lumo-api-mlsc.onrender.com',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://lumo-api-m7w6.onrender.com',
 });
 
 // Add request interceptor for auth token

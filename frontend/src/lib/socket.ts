@@ -5,7 +5,7 @@ let socket: Socket | null = null;
 export const connectSocket = (userId: string) => {
   if (socket?.connected) return socket;
 
-  socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:8000', {
+  socket = io(process.env.NEXT_PUBLIC_SOCKET_URL || 'https://lumo-api-m7w6.onrender.com', {
     auth: {
       userId,
     },
