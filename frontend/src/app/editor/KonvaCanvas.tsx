@@ -14,9 +14,10 @@ function uid() {
 interface Props {
   roomId: string;
   showAiPanel: boolean;
+  layout: 'canvas' | 'doc' | 'both';
 }
 
-export default function KonvaCanvas({ roomId, showAiPanel }: Props) {
+export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
   const {
     elements, selectedTool, selectedColor, strokeWidth, zoom, panX, panY,
     addElement, setSelectedIds, clearSelection, setZoom, setPan,
@@ -36,11 +37,16 @@ export default function KonvaCanvas({ roomId, showAiPanel }: Props) {
   /* responsive size */
   const [size, setSize] = useState({ w: 1200, h: 700 });
   useEffect(() => {
-    const update = () => setSize({ w: window.innerWidth - (showAiPanel ? 320 : 0), h: window.innerHeight - 48 });
+    const update = () => {
+      let w = window.innerWidth;
+      if (showAiPanel) w -= 320;
+      if (layout === 'both') w -= 420;
+      setSize({ w: Math.max(w, 200), h: window.innerHeight - 48 });
+    };
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  }, [showAiPanel]);
+  }, [showAiPanel, layout]);
 
   /* helper: pointer pos in canvas coords */
   const ptr = useCallback(() => {

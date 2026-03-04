@@ -10,7 +10,7 @@ import Link from 'next/link';
 import type { CanvasElement, Tool, ShapeObject } from '@app-types/index';
 
 /* Konva must be loaded client-side only (it accesses `window`) */
-const KonvaCanvas = dynamic<{ roomId: string; showAiPanel: boolean }>(
+const KonvaCanvas = dynamic<{ roomId: string; showAiPanel: boolean; layout: 'canvas' | 'doc' | 'both' }>(
   () => import('./KonvaCanvas'),
   { ssr: false },
 );
@@ -79,6 +79,12 @@ export default function EditorPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState('');
   const [showColorPicker, setShowColorPicker] = useState(false);
+  const [layout, setLayout] = useState<'canvas' | 'doc' | 'both'>('both');
+  const [docContent, setDocContent] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   /* ─── Load room data ─── */
   useEffect(() => {
@@ -155,9 +161,59 @@ export default function EditorPage() {
   };
 
   const handleExport = () => {
-    // The KonvaCanvas child will expose export through a ref, but for simplicity we
-    // use the stage ref that's available there.
     toast.success('Use Ctrl+Shift+S to export (coming soon)');
+  };
+
+  /* ─── Save canvas state ─── */
+  const handleSave = useCallback(async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      await roomAPI.update(roomId, { name: roomName });
+      setLastSaved(new Date());
+      toast.success('Saved');
+    } catch {
+      toast.error('Failed to save');
+    } finally {
+      setSaving(false);
+    }
+  }, [roomId, roomName, saving]);
+
+  /* ─── Ctrl+S shortcut ─── */
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); handleSave(); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [handleSave]);
+
+  /* ─── Share link ─── */
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}/editor?room=${roomId}` : '';
+
+  const handleCopyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+    } catch {
+      const el = document.createElement('textarea');
+      el.value = shareUrl; document.body.appendChild(el); el.select();
+      document.execCommand('copy'); document.body.removeChild(el);
+    }
+    setLinkCopied(true);
+    toast.success('Link copied to clipboard!');
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  /* ─── Doc formatting helpers ─── */
+  const insertDocFormat = (prefix: string, suffix = '') => {
+    const ta = document.getElementById('doc-editor') as HTMLTextAreaElement | null;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const selected = docContent.slice(start, end);
+    const next = docContent.slice(0, start) + prefix + selected + suffix + docContent.slice(end);
+    setDocContent(next);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(start + prefix.length, end + prefix.length); }, 0);
   };
 
   const cursorForTool: Record<string, string> = {
@@ -183,6 +239,21 @@ export default function EditorPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5 3 12m0 0 7.5-7.5M3 12h18" /></svg>
         </Link>
         <span className="text-sm font-medium text-surface-200 truncate max-w-[140px]">{roomName}</span>
+        {lastSaved && <span className="text-[9px] text-surface-600 ml-1">saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+        <div className="w-px h-6 bg-surface-700 mx-1" />
+
+        {/* Layout toggle — Doc | Both | Canvas (like eraser.io) */}
+        <div className="flex items-center bg-surface-800 border border-surface-700 rounded-lg p-0.5 gap-0.5">
+          <button onClick={() => setLayout('doc')} className={`p-1.5 rounded-md transition-all ${layout === 'doc' ? 'bg-brand-500 text-white shadow-glow-brand' : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'}`} title="Document only">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+          </button>
+          <button onClick={() => setLayout('both')} className={`p-1.5 rounded-md transition-all ${layout === 'both' ? 'bg-brand-500 text-white shadow-glow-brand' : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'}`} title="Document + Canvas">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.875 0h15.75c.621 0 1.125-.504 1.125-1.125V5.625c0-.621-.504-1.125-1.125-1.125H4.125c-.621 0-1.125.504-1.125 1.125v12.75c0 .621.504 1.125 1.125 1.125Z" /></svg>
+          </button>
+          <button onClick={() => setLayout('canvas')} className={`p-1.5 rounded-md transition-all ${layout === 'canvas' ? 'bg-brand-500 text-white shadow-glow-brand' : 'text-surface-400 hover:text-surface-200 hover:bg-surface-700'}`} title="Canvas only">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0 0 22.5 18.75V5.25A2.25 2.25 0 0 0 20.25 3H3.75A2.25 2.25 0 0 0 1.5 5.25v13.5A2.25 2.25 0 0 0 3.75 21Z" /></svg>
+          </button>
+        </div>
         <div className="w-px h-6 bg-surface-700 mx-1" />
 
         {/* Tools */}
@@ -231,6 +302,21 @@ export default function EditorPage() {
 
         {/* Right actions */}
         <div className="flex items-center gap-1.5">
+          {/* Save */}
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-surface-800 border border-surface-700 text-surface-300 hover:text-white hover:border-surface-600 transition-all disabled:opacity-50" title="Save (Ctrl+S)">
+            {saving ? (
+              <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+            ) : (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9 3.75H6.912a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h2.21a2.25 2.25 0 0 0 2.012-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859M12 3v8.25m0 0-3-3m3 3 3-3" /></svg>
+            )}
+            Save
+          </button>
+          {/* Share */}
+          <button onClick={() => setShowShareModal(true)} className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium bg-brand-500 hover:bg-brand-600 text-white transition-all" title="Share & Collaborate">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.217 10.907a2.25 2.25 0 1 0 0 2.186m0-2.186c.18.324.283.696.283 1.093s-.103.77-.283 1.093m0-2.186 9.566-5.314m-9.566 7.5 9.566 5.314m0 0a2.25 2.25 0 1 0 3.935 2.186 2.25 2.25 0 0 0-3.935-2.186Zm0-12.814a2.25 2.25 0 1 0 3.935-2.186 2.25 2.25 0 0 0-3.935 2.186Z" /></svg>
+            Share
+          </button>
+          <div className="w-px h-6 bg-surface-700 mx-1" />
           <span className="text-[10px] text-surface-500 tabular-nums">{Math.round(zoom * 100)}%</span>
           <button onClick={() => setZoom(Math.max(zoom * 0.9, 0.1))} className="btn-ghost p-1" title="Zoom out">
             <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" d="M5 12h14" /></svg>
@@ -249,9 +335,56 @@ export default function EditorPage() {
         </div>
       </header>
 
-      {/* ── Canvas + AI panel ── */}
-      <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative" style={{ cursor: cursorForTool[selectedTool] || 'default' }}>
+      {/* ── Main content: Doc + Canvas + AI ── */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* ── Document panel (eraser.io style) ── */}
+        <div className={`${layout === 'canvas' ? 'hidden' : ''} ${layout === 'both' ? 'w-[420px] flex-shrink-0' : 'flex-1'} bg-surface-900 border-r border-surface-700/60 flex flex-col transition-all`}>
+          {/* Doc header */}
+          <div className="h-10 flex items-center justify-between px-4 border-b border-surface-700/60 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <svg className="w-4 h-4 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" /></svg>
+              <span className="text-xs font-semibold text-surface-300 uppercase tracking-wider">Document</span>
+            </div>
+            <span className="text-[9px] text-surface-600 tabular-nums">{docContent.length > 0 ? `${docContent.split('\n').length} lines` : ''}</span>
+          </div>
+          {/* Formatting toolbar */}
+          <div className="flex items-center gap-0.5 px-3 py-1.5 border-b border-surface-700/40 flex-shrink-0 overflow-x-auto">
+            <button onClick={() => insertDocFormat('# ')} className="px-1.5 py-0.5 rounded text-[10px] font-bold text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Heading 1">H1</button>
+            <button onClick={() => insertDocFormat('## ')} className="px-1.5 py-0.5 rounded text-[10px] font-bold text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Heading 2">H2</button>
+            <button onClick={() => insertDocFormat('### ')} className="px-1.5 py-0.5 rounded text-[10px] font-bold text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Heading 3">H3</button>
+            <div className="w-px h-4 bg-surface-700 mx-1" />
+            <button onClick={() => insertDocFormat('**', '**')} className="px-1.5 py-0.5 rounded text-[10px] font-bold text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Bold (Ctrl+B)">B</button>
+            <button onClick={() => insertDocFormat('_', '_')} className="px-1.5 py-0.5 rounded text-[10px] italic text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Italic (Ctrl+I)">I</button>
+            <button onClick={() => insertDocFormat('`', '`')} className="px-1.5 py-0.5 rounded text-[10px] font-mono text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Inline code">{`</>`}</button>
+            <div className="w-px h-4 bg-surface-700 mx-1" />
+            <button onClick={() => insertDocFormat('- ')} className="px-1.5 py-0.5 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Bullet list">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0ZM3.75 12h.007v.008H3.75V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm-.375 5.25h.007v.008H3.75v-.008Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
+            </button>
+            <button onClick={() => insertDocFormat('- [ ] ')} className="px-1.5 py-0.5 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Checklist">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" /></svg>
+            </button>
+            <button onClick={() => insertDocFormat('\n```\n', '\n```\n')} className="px-1.5 py-0.5 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Code block">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5" /></svg>
+            </button>
+            <button onClick={() => insertDocFormat('[', '](url)')} className="px-1.5 py-0.5 rounded text-surface-400 hover:text-surface-200 hover:bg-surface-700/50 transition-colors" title="Link">
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m9.86-4.939a4.5 4.5 0 0 0-1.242-7.244l-4.5-4.5a4.5 4.5 0 0 0-6.364 6.364l1.757 1.757" /></svg>
+            </button>
+          </div>
+          {/* Editor */}
+          <div className="flex-1 overflow-y-auto">
+            <textarea
+              id="doc-editor"
+              value={docContent}
+              onChange={(e) => setDocContent(e.target.value)}
+              placeholder={"Start documenting here…\n\n# Architecture Overview\nDescribe your system design alongside the canvas.\n\n## Components\n- Use **markdown** formatting\n- Add context to diagrams\n- [ ] Track progress with checklists"}
+              className="w-full h-full bg-transparent text-surface-200 placeholder-surface-600 resize-none outline-none text-sm leading-relaxed p-4 font-mono"
+              spellCheck={false}
+            />
+          </div>
+        </div>
+
+        {/* ── Canvas ── */}
+        <div className={`${layout === 'doc' ? 'hidden' : ''} flex-1 relative`} style={{ cursor: cursorForTool[selectedTool] || 'default' }}>
           {/* Dot grid */}
           <div
             className="absolute inset-0 pointer-events-none z-0"
@@ -261,7 +394,7 @@ export default function EditorPage() {
               backgroundPosition: `${panX % (24 * zoom)}px ${panY % (24 * zoom)}px`,
             }}
           />
-          <KonvaCanvas roomId={roomId} showAiPanel={showAiPanel} />
+          <KonvaCanvas roomId={roomId} showAiPanel={showAiPanel} layout={layout} />
           {/* Bottom info */}
           <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-surface-500 bg-surface-900/80 backdrop-blur-sm border border-surface-700/40 rounded-lg px-3 py-1.5 z-10">
             <span>{elements.length} elements</span>
@@ -309,6 +442,40 @@ export default function EditorPage() {
               )}
             </div>
           </aside>
+        )}
+
+        {/* ── Share & collaborate modal ── */}
+        {showShareModal && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50" onClick={() => setShowShareModal(false)}>
+            <div className="bg-surface-800 border border-surface-700 rounded-xl p-6 w-[480px] max-w-[90vw] shadow-float animate-scale-in" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-1">
+                <h3 className="text-base font-semibold text-white">Share &amp; Collaborate</h3>
+                <button onClick={() => setShowShareModal(false)} className="text-surface-500 hover:text-surface-300 transition-colors">
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <p className="text-sm text-surface-400 mb-4">Share this link with teammates to collaborate on <span className="text-surface-200 font-medium">{roomName}</span> in real-time.</p>
+              <div className="flex items-center gap-2">
+                <input type="text" value={shareUrl} readOnly className="input-field text-xs flex-1 font-mono bg-surface-900 select-all" onClick={(e) => (e.target as HTMLInputElement).select()} />
+                <button onClick={handleCopyLink} className={`px-4 py-2.5 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 flex-shrink-0 ${linkCopied ? 'bg-green-500 text-white' : 'bg-brand-500 hover:bg-brand-600 text-white'}`}>
+                  {linkCopied ? (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="m4.5 12.75 6 6 9-13.5" /></svg>Copied!</>
+                  ) : (
+                    <><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9.75a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg>Copy link</>
+                  )}
+                </button>
+              </div>
+              <div className="mt-4 pt-4 border-t border-surface-700/60 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-full bg-brand-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-4 h-4 text-brand-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" /></svg>
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-surface-300">Real-time collaboration</p>
+                  <p className="text-xs text-surface-500 mt-0.5">Anyone with this link can join and edit the canvas when logged in. Changes sync instantly.</p>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>
