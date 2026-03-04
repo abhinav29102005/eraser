@@ -1,2 +1,8 @@
 # SPA fallback for dynamic editor routes: /editor/<roomId> → /editor.html
 /editor/* /editor.html 200
+
+# SPA fallback for all other client-side routes
+/dashboard/* /dashboard.html 200
+/login/*     /login.html 200
+/register/*  /register.html 200
+/*           /index.html 200
