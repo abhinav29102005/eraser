@@ -9,6 +9,10 @@ from fastapi.responses import JSONResponse
 from socketio import AsyncServer
 from aiohttp import web
 import aiohttp
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 from app.routes import auth, rooms, ai
 from app.database import SessionLocal, Room, User

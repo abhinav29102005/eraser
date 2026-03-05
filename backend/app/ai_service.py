@@ -1,12 +1,16 @@
 import os
 import httpx
 import importlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 AsyncOpenAI = None
 try:
     openai_module = importlib.import_module("openai")
     AsyncOpenAI = getattr(openai_module, "AsyncOpenAI", None)
-except Exception:
+except Exception as e:
+    logger.warning(f"OpenAI module not available: {e}")
     AsyncOpenAI = None
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
@@ -14,14 +18,32 @@ AI_PROVIDER = os.getenv("AI_PROVIDER", "auto").strip().lower()
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
-client = AsyncOpenAI(api_key=OPENAI_API_KEY) if (OPENAI_API_KEY and AsyncOpenAI) else None
+# Initialize OpenAI client
+client = None
+if OPENAI_API_KEY and AsyncOpenAI:
+    try:
+        client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+        logger.info("✓ OpenAI client initialized successfully")
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        client = None
+else:
+    if not OPENAI_API_KEY:
+        logger.warning("⚠ OPENAI_API_KEY not set in environment")
+    if not AsyncOpenAI:
+        logger.warning("⚠ AsyncOpenAI not available - openai module may not be installed")
 
 
 def _resolve_provider() -> str:
     if AI_PROVIDER in {"openai", "ollama", "mock"}:
+        logger.debug(f"Using explicitly configured provider: {AI_PROVIDER}")
         return AI_PROVIDER
-    if OPENAI_API_KEY:
+    
+    if OPENAI_API_KEY and client:
+        logger.debug("Using OpenAI as default provider (API key available)")
         return "openai"
+    
+    logger.debug("Using mock provider as fallback")
     return "mock"
 
 
