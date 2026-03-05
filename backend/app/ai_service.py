@@ -43,24 +43,105 @@ async def _ollama_chat(prompt: str, system: str) -> str:
 
 def _mock_diagram(prompt: str) -> str:
     """Generate a Mermaid diagram template based on prompt keywords."""
-    keywords = prompt.split()[:4]
+    prompt_lower = prompt.lower()
     
-    # Basic Mermaid flowchart template
-    mermaid_code = "graph TD\n"
+    # Detect diagram type from prompt
+    if 'dsa' in prompt_lower or 'data structure' in prompt_lower or 'algorithm' in prompt_lower:
+        # DSA Roadmap
+        return """flowchart LR
+    subgraph F[Foundations]
+        F1[Big O Notation]
+        F2[Recursion]
+        F3[Bit Manipulation]
+    end
     
-    if len(keywords) >= 2:
-        # Create a simple flow diagram
-        mermaid_code += f'    A["{keywords[0].capitalize()}"] --> B["{keywords[1].capitalize()}"]\n'
-        if len(keywords) >= 3:
-            mermaid_code += f'    B --> C["{keywords[2].capitalize()}"]\n'
-        if len(keywords) >= 4:
-            mermaid_code += f'    C --> D["{keywords[3].capitalize()}"]\n'
+    subgraph DS[Data Structures]
+        DS1[Arrays]
+        DS2[Strings]
+        DS3[Linked List]
+        DS4[Stack & Queue]
+        DS5[Hash Table]
+    end
+    
+    subgraph T[Trees]
+        T1[Binary Tree]
+        T2[BST]
+        T3[Tree Traversal]
+        T4[Heap]
+    end
+    
+    subgraph G[Graphs]
+        G1[Graph Representation]
+        G2[BFS & DFS]
+        G3[Shortest Path]
+    end
+    
+    subgraph A[Algorithms]
+        A1[Sorting]
+        A2[Binary Search]
+        A3[Greedy]
+        A4[Backtracking]
+    end
+    
+    subgraph DP[Dynamic Programming]
+        DP1[Memoization]
+        DP2[Tabulation]
+        DP3[Knapsack & LIS]
+    end
+    
+    subgraph AP[Advanced Patterns]
+        AP1[Sliding Window]
+        AP2[Two Pointers]
+        AP3[Trie]
+    end
+    
+    F --> DS --> T --> G --> A --> DP --> AP"""
+    
+    elif 'microservice' in prompt_lower or 'architecture' in prompt_lower:
+        return """flowchart TD
+    Client[Client Application]
+    Gateway[API Gateway]
+    Auth[Auth Service]
+    UserSvc[User Service]
+    OrderSvc[Order Service]
+    DB[(Database)]
+    Cache[(Redis Cache)]
+    
+    Client --> Gateway
+    Gateway --> Auth
+    Gateway --> UserSvc
+    Gateway --> OrderSvc
+    UserSvc --> DB
+    OrderSvc --> DB
+    UserSvc --> Cache
+    OrderSvc --> Cache"""
+    
+    elif 'cicd' in prompt_lower or 'pipeline' in prompt_lower or 'deployment' in prompt_lower:
+        return """flowchart LR
+    Code[Code Commit]
+    Build[Build]
+    Test[Run Tests]
+    Deploy[Deploy]
+    Monitor[Monitor]
+    
+    Code --> Build --> Test --> Deploy --> Monitor
+    Monitor -.Feedback.-> Code"""
+    
     else:
-        # Fallback simple template
-        mermaid_code += '    A["Client"] --> B["Server"]\n'
-        mermaid_code += '    B --> C["Database"]\n'
-    
-    return mermaid_code
+        # Generic flowchart from keywords
+        keywords = [w.strip(',.!?') for w in prompt.split() if len(w) > 3][:6]
+        if len(keywords) < 2:
+            keywords = ['Start', 'Process', 'End']
+        
+        mermaid_code = "flowchart TD\n"
+        for i, kw in enumerate(keywords):
+            node_id = chr(65 + i)  # A, B, C, ...
+            mermaid_code += f'    {node_id}["{kw.capitalize()}"]\n'
+        
+        for i in range(len(keywords) - 1):
+            mermaid_code += f'    {chr(65 + i)} --> {chr(65 + i + 1)}\n'
+        
+        return mermaid_code
 
 
 def _humanize_response(prompt: str, extra: str = "") -> str:
@@ -189,23 +270,33 @@ async def generate_diagram(prompt: str) -> str:
                 messages=[
                     {
                         "role": "system",
-                        "content": """You are an expert at creating Mermaid diagrams. 
-Generate clean, professional Mermaid diagram syntax. Choose the best diagram type (flowchart, graph, sequence, state, class, etc.) based on the prompt.
-Return ONLY valid Mermaid syntax without markdown code blocks or explanations.""",
+                        "content": """You are an expert at creating detailed, professional Mermaid diagrams.
+
+Guidelines:
+- Choose the best diagram type: flowchart LR/TD, graph, sequence, state, class, mindmap, etc.
+- Create DETAILED diagrams with multiple nodes and clear relationships
+- Use subgraphs to group related concepts
+- Add descriptive labels to nodes and edges
+- For roadmaps/learning paths: use flowchart LR with subgraphs for each major topic
+- For architectures: show all components and their connections
+- For processes: show all steps clearly
+- Return ONLY valid Mermaid syntax without markdown code blocks, explanations, or comments
+- Ensure the diagram is comprehensive and informative""",
                     },
                     {
                         "role": "user",
-                        "content": f"Create a Mermaid diagram for: {prompt}",
+                        "content": f"Create a detailed, comprehensive Mermaid diagram for: {prompt}",
                     },
                 ],
-                max_tokens=1000,
+                max_tokens=2000,
             )
             return response.choices[0].message.content or ""
 
         if provider == "ollama":
             return await _ollama_chat(
-                f"Create a Mermaid diagram for: {prompt}",
-                """You are an expert at creating Mermaid diagrams. Generate clean, professional Mermaid syntax.
+                f"Create a detailed, comprehensive Mermaid diagram for: {prompt}",
+                """You are an expert at creating detailed, professional Mermaid diagrams.
+Use subgraphs to group related concepts. Create comprehensive diagrams with multiple nodes.
 Choose the best diagram type based on the prompt. Return ONLY valid Mermaid code without markdown blocks.""",
             )
 
@@ -296,19 +387,24 @@ async def generate_diagram_svg(prompt: str) -> dict:
                     {
                         "role": "system",
                         "content": (
-                            "You are an expert at creating professional Mermaid diagrams. "
+                            "You are an expert at creating detailed, professional Mermaid diagrams. "
                             "Return ONLY valid Mermaid syntax without markdown code blocks. "
-                            "Choose the best diagram type (flowchart, graph, sequence, state, class, etc.) based on the prompt. "
-                            "Use clear labels, logical flow, and proper Mermaid syntax. "
-                            "Make diagrams professional and suitable for technical documentation."
+                            "Choose the best diagram type (flowchart LR/TD, graph, sequence, state, class, mindmap, etc.) based on the prompt. "
+                            "Create comprehensive diagrams with:\n"
+                            "- Multiple nodes showing all relevant concepts\n"
+                            "- Subgraphs to group related items\n"
+                            "- Clear, descriptive labels\n"
+                            "- Proper connections showing relationships\n"
+                            "For roadmaps/learning paths, use flowchart LR with detailed subgraphs for each topic area. "
+                            "Make diagrams professional, informative, and suitable for technical documentation."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": f"Create a Mermaid diagram for: {prompt}",
+                        "content": f"Create a detailed, comprehensive Mermaid diagram for: {prompt}",
                     },
                 ],
-                max_tokens=1500,
+                max_tokens=2500,
             )
             mermaid_code = response.choices[0].message.content or ""
             # Clean up if wrapped in markdown code blocks
@@ -316,9 +412,10 @@ async def generate_diagram_svg(prompt: str) -> dict:
 
         elif provider == "ollama":
             mermaid_code = await _ollama_chat(
-                f"Create a Mermaid diagram for: {prompt}",
+                f"Create a detailed, comprehensive Mermaid diagram for: {prompt}",
                 (
-                    "You are an expert at creating professional Mermaid diagrams. "
+                    "You are an expert at creating detailed, professional Mermaid diagrams. "
+                    "Use subgraphs to group related concepts. Create comprehensive diagrams with multiple nodes. "
                     "Return ONLY valid Mermaid syntax without markdown blocks. "
                     "Choose the best diagram type based on the prompt."
                 ),
@@ -328,7 +425,7 @@ async def generate_diagram_svg(prompt: str) -> dict:
         print(f"AI Mermaid Error: {e}")
 
     # Fallback to mock Mermaid diagram
-    if not mermaid_code or "graph" not in mermaid_code.lower():
+    if not mermaid_code or not any(keyword in mermaid_code.lower() for keyword in ['graph', 'flowchart', 'sequenceDiagram', 'classDiagram', 'stateDiagram', 'mindmap']):
         mermaid_code = _mock_diagram(prompt)
 
     message = _humanize_response(prompt, "I've created a Mermaid diagram for you!")
