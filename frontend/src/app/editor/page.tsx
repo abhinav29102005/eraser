@@ -218,11 +218,22 @@ export default function EditorPage() {
           height = parseFloat(heightMatch[1]);
         }
         
-        // Scale up Mermaid diagrams for better visibility (2x scale)
-        // and ensure minimum dimensions
-        const scaleFactor = 2;
-        width = Math.max(width * scaleFactor, 600);
-        height = Math.max(height * scaleFactor, 400);
+        // Scale to fit nicely in viewport (90% of visible canvas area)
+        const maxCanvasWidth = (window.innerWidth - 100) / zoom; // 100px for margins
+        const maxCanvasHeight = (window.innerHeight - 100) / zoom;
+        
+        const scaleFactor = Math.min(
+          maxCanvasWidth / width,
+          maxCanvasHeight / height,
+          2.5 // Max scale of 2.5x
+        );
+        
+        width = width * scaleFactor;
+        height = height * scaleFactor;
+        
+        // Ensure minimum visibility
+        width = Math.max(width, 400);
+        height = Math.max(height, 300);
         
       } else if (aiSvgData.svg) {
         // Use existing SVG
@@ -243,16 +254,16 @@ export default function EditorPage() {
       const encoded = btoa(unescape(encodeURIComponent(svgString)));
       const dataUri = `data:image/svg+xml;base64,${encoded}`;
 
-      // Place at center of the current viewport
-      const cx = (-panX + (window.innerWidth / 2)) / zoom;
-      const cy = (-panY + (window.innerHeight / 2)) / zoom;
-
+      // Place at center of the current viewport with better positioning
+      const viewportCenterX = -panX / zoom + (window.innerWidth / 2) / zoom;
+      const viewportCenterY = (-panY + 48) / zoom + (window.innerHeight / 2) / zoom; // 48px for header
+      
       const el: CanvasElement = {
         kind: 'shape',
         id: uid(),
         type: 'image',
-        x: cx - width / 2,
-        y: cy - height / 2,
+        x: viewportCenterX - width / 2,
+        y: viewportCenterY - height / 2,
         width: width,
         height: height,
         src: dataUri,
@@ -275,7 +286,7 @@ export default function EditorPage() {
         stroke_width: 0,
       }).catch(() => {});
 
-      toast.success('Diagram added to canvas! 🎨 You can now move and resize it.');
+      toast.success('Diagram added to canvas! 🎨 Drag corners to resize.');
       
       // Auto-select the newly added diagram for immediate interaction
       setSelectedIds([el.id]);

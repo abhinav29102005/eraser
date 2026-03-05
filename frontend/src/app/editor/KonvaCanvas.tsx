@@ -60,7 +60,7 @@ interface Props {
 
 export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
   const {
-    elements, selectedTool, selectedColor, strokeWidth, zoom, panX, panY,
+    elements, selectedTool, selectedColor, strokeWidth, zoom, panX, panY, selectedIds,
     addElement, setSelectedIds, clearSelection, setZoom, setPan,
   } = useWhiteboardStore();
 
@@ -88,6 +88,30 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
   }, [showAiPanel, layout]);
+
+  /* attach transformer to selected elements */
+  useEffect(() => {
+    const transformer = transformerRef.current;
+    const stage = stageRef.current;
+    if (!transformer || !stage) return;
+
+    if (selectedIds.length === 1) {
+      const selectedNode = stage.findOne(`#${selectedIds[0]}`);
+      if (selectedNode) {
+        transformer.nodes([selectedNode]);
+        transformer.getLayer()?.batchDraw();
+      }
+    } else if (selectedIds.length > 1) {
+      const selectedNodes = selectedIds.map((id) => stage.findOne(`#${id}`)).filter(Boolean);
+      if (selectedNodes.length > 0) {
+        transformer.nodes(selectedNodes);
+        transformer.getLayer()?.batchDraw();
+      }
+    } else {
+      transformer.nodes([]);
+      transformer.getLayer()?.batchDraw();
+    }
+  }, [selectedIds]);
 
   /* helper: pointer pos in canvas coords */
   const ptr = useCallback(() => {
@@ -301,7 +325,26 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
           />
         )}
         {renderTemp()}
-        <Transformer ref={transformerRef} />
+        <Transformer 
+          ref={transformerRef}
+          onTransformEnd={(e) => {
+            // Update selected elements after transform
+            selectedIds.forEach((id) => {
+              const node = stageRef.current?.findOne(`#${id}`);
+              if (node) {
+                useWhiteboardStore.getState().updateElement(id, {
+                  x: node.x(),
+                  y: node.y(),
+                  width: node.width() * node.scaleX(),
+                  height: node.height() * node.scaleY(),
+                  rotation: node.rotation(),
+                } as any);
+                node.scaleX(1);
+                node.scaleY(1);
+              }
+            });
+          }}
+        />
       </Layer>
     </Stage>
   );
