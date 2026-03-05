@@ -7,7 +7,11 @@ import { useWhiteboardStore } from '@store/whiteboard';
 import { roomAPI, aiAPI } from '@lib/services';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
+import mermaid from 'mermaid';
 import type { CanvasElement, Tool, ShapeObject, AIDiagramSVGResult } from '@app-types/index';
+
+/* Initialize mermaid */
+mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
 
 /* Konva must be loaded client-side only (it accesses `window`) */
 const KonvaCanvas = dynamic<{ roomId: string; showAiPanel: boolean; layout: 'canvas' | 'doc' | 'both' }>(
@@ -175,47 +179,80 @@ export default function EditorPage() {
     } finally { setAiLoading(false); }
   };
 
-  const handleAddSvgToCanvas = () => {
-    if (!aiSvgData?.svg) return;
-    // Convert SVG string to a data URI so KonvaCanvas can render it as an image
-    const encoded = btoa(unescape(encodeURIComponent(aiSvgData.svg)));
-    const dataUri = `data:image/svg+xml;base64,${encoded}`;
+  const handleAddSvgToCanvas = async () => {
+    if (!aiSvgData) return;
+    
+    let svgString: string | null = null;
+    let width = 500;
+    let height = 350;
 
-    // Place at center of the current viewport
-    const cx = (-panX + (window.innerWidth / 2)) / zoom;
-    const cy = (-panY + (window.innerHeight / 2)) / zoom;
-    const w = aiSvgData.width || 500;
-    const h = aiSvgData.height || 350;
+    try {
+      // If it's a Mermaid diagram, convert it to SVG first
+      if (aiSvgData.type === 'mermaid' && aiSvgData.mermaid) {
+        const { svg } = await mermaid.render('mermaid-diagram', aiSvgData.mermaid);
+        svgString = svg;
+        // Try to extract dimensions from the rendered SVG
+        const match = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
+        if (match) {
+          width = parseInt(match[1], 10);
+          height = parseInt(match[2], 10);
+        }
+      } else if (aiSvgData.svg) {
+        // Use existing SVG
+        svgString = aiSvgData.svg;
+        width = aiSvgData.width || 500;
+        height = aiSvgData.height || 350;
+      } else {
+        toast.error('No diagram data available');
+        return;
+      }
 
-    const el: CanvasElement = {
-      kind: 'shape',
-      id: uid(),
-      type: 'image',
-      x: cx - w / 2,
-      y: cy - h / 2,
-      width: w,
-      height: h,
-      src: dataUri,
-      color: '#ffffff',
-      strokeWidth: 0,
-      opacity: 1,
-      rotation: 0,
-      userId: localStorage.getItem('userId') || '',
-      timestamp: Date.now(),
-    };
+      if (!svgString) {
+        toast.error('Failed to render diagram');
+        return;
+      }
 
-    addElement(el);
-    // Persist to backend
-    roomAPI.addObject(roomId, {
-      type: 'image',
-      x: el.x,
-      y: el.y,
-      data: { width: w, height: h, src: dataUri },
-      color: '#ffffff',
-      stroke_width: 0,
-    }).catch(() => {});
+      // Convert SVG string to a data URI so KonvaCanvas can render it as an image
+      const encoded = btoa(unescape(encodeURIComponent(svgString)));
+      const dataUri = `data:image/svg+xml;base64,${encoded}`;
 
-    toast.success('Diagram added to canvas!');
+      // Place at center of the current viewport
+      const cx = (-panX + (window.innerWidth / 2)) / zoom;
+      const cy = (-panY + (window.innerHeight / 2)) / zoom;
+
+      const el: CanvasElement = {
+        kind: 'shape',
+        id: uid(),
+        type: 'image',
+        x: cx - width / 2,
+        y: cy - height / 2,
+        width: width,
+        height: height,
+        src: dataUri,
+        color: '#ffffff',
+        strokeWidth: 0,
+        opacity: 1,
+        rotation: 0,
+        userId: localStorage.getItem('userId') || '',
+        timestamp: Date.now(),
+      };
+
+      addElement(el);
+      // Persist to backend
+      roomAPI.addObject(roomId, {
+        type: 'image',
+        x: el.x,
+        y: el.y,
+        data: { width: width, height: height, src: dataUri },
+        color: '#ffffff',
+        stroke_width: 0,
+      }).catch(() => {});
+
+      toast.success('Diagram added to canvas!');
+    } catch (error) {
+      console.error('Failed to render diagram:', error);
+      toast.error('Failed to render diagram on canvas');
+    }
   };
 
   const handleExport = () => {
@@ -556,16 +593,24 @@ export default function EditorPage() {
                 </div>
               )}
 
-              {/* SVG preview + Add to Canvas */}
-              {aiSvgData?.svg && (
+              {/* Mermaid/SVG preview + Add to Canvas */}
+              {(aiSvgData?.mermaid || aiSvgData?.svg) && (
                 <div className="space-y-3">
                   <div className="bg-surface-800 border border-surface-700 rounded-xl p-2 overflow-hidden">
-                    <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold mb-2 px-1">Preview</p>
-                    <div
-                      className="rounded-lg overflow-hidden bg-[#1e1e2e] flex items-center justify-center"
-                      dangerouslySetInnerHTML={{ __html: aiSvgData.svg }}
-                      style={{ maxHeight: 220 }}
-                    />
+                    <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold mb-2 px-1">
+                      {aiSvgData.type === 'mermaid' ? 'Mermaid Diagram' : 'Preview'}
+                    </p>
+                    {aiSvgData.type === 'mermaid' && aiSvgData.mermaid ? (
+                      <div className="bg-[#1e1e2e] rounded-lg p-3 overflow-auto">
+                        <pre className="text-xs text-surface-300 font-mono whitespace-pre-wrap">{aiSvgData.mermaid}</pre>
+                      </div>
+                    ) : aiSvgData.svg ? (
+                      <div
+                        className="rounded-lg overflow-hidden bg-[#1e1e2e] flex items-center justify-center"
+                        dangerouslySetInnerHTML={{ __html: aiSvgData.svg }}
+                        style={{ maxHeight: 220 }}
+                      />
+                    ) : null}
                   </div>
                   <button
                     onClick={handleAddSvgToCanvas}
@@ -577,8 +622,8 @@ export default function EditorPage() {
                 </div>
               )}
 
-              {/* Fallback: text-only response (when SVG isn't available) */}
-              {aiResult && !aiSvgData?.svg && (
+              {/* Fallback: text-only response (when SVG/Mermaid isn't available) */}
+              {aiResult && !aiSvgData?.svg && !aiSvgData?.mermaid && (
                 <div className="bg-surface-800 border border-surface-700 rounded-lg p-3">
                   <h4 className="text-xs font-semibold text-brand-400 mb-2">AI Response</h4>
                   <pre className="text-xs text-surface-300 whitespace-pre-wrap leading-relaxed max-h-64 overflow-y-auto">{aiResult}</pre>

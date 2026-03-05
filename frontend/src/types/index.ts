@@ -96,9 +96,11 @@ export interface AIPrompt {
 export interface AIDiagramSVGResult {
   id: string;
   prompt: string;
-  svg: string;
+  mermaid?: string;
+  svg?: string;
   message: string;
-  width: number;
-  height: number;
+  width?: number;
+  height?: number;
+  type?: 'mermaid' | 'svg';
   timestamp: number;
 }
