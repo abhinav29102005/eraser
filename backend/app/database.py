@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, String, DateTime, Float, JSON, Integer, ForeignKey, Table
+from sqlalchemy import create_engine, Column, String, DateTime, Float, JSON, Integer, BigInteger, ForeignKey, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
@@ -66,7 +66,7 @@ class DrawingObject(Base):
     data = Column(JSON)
     color = Column(String, nullable=True)
     stroke_width = Column(Float, nullable=True)
-    timestamp = Column(Integer)
+    timestamp = Column(BigInteger)
     
     room = relationship("Room", back_populates="objects")
     user = relationship("User", back_populates="drawing_objects")
@@ -80,7 +80,7 @@ class AIPrompt(Base):
     room_id = Column(String, ForeignKey("rooms.id"), nullable=True)
     prompt = Column(String)
     result = Column(String)
-    timestamp = Column(Integer)
+    timestamp = Column(BigInteger)
     
     user = relationship("User", back_populates="ai_prompts")
 
