@@ -102,7 +102,9 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
         transformer.getLayer()?.batchDraw();
       }
     } else if (selectedIds.length > 1) {
-      const selectedNodes = selectedIds.map((id) => stage.findOne(`#${id}`)).filter(Boolean);
+      const selectedNodes = selectedIds
+        .map((id) => stage.findOne(`#${id}`))
+        .filter((node): node is Konva.Node => node !== undefined);
       if (selectedNodes.length > 0) {
         transformer.nodes(selectedNodes);
         transformer.getLayer()?.batchDraw();
