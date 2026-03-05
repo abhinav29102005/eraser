@@ -93,4 +93,25 @@ def get_db():
         db.close()
 
 
+def migrate_timestamp_columns():
+    """Migrate timestamp columns from INTEGER to BIGINT if needed."""
+    if "postgresql" in DATABASE_URL:
+        with engine.begin() as connection:
+            # Check if drawing_objects.timestamp is still INTEGER and migrate if needed
+            try:
+                connection.execute("""
+                    ALTER TABLE drawing_objects ALTER COLUMN timestamp TYPE BIGINT;
+                """)
+            except Exception:
+                pass  # Column already BIGINT or doesn't exist
+            
+            try:
+                connection.execute("""
+                    ALTER TABLE ai_prompts ALTER COLUMN timestamp TYPE BIGINT;
+                """)
+            except Exception:
+                pass  # Column already BIGINT or doesn't exist
+
+
 Base.metadata.create_all(bind=engine)
+migrate_timestamp_columns()
