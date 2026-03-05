@@ -42,7 +42,9 @@ alembic upgrade head                  # Run migrations
 ## Architecture
 
 ### Frontend (Next.js 14 + TypeScript)
-- **State Management**: Zustand (`frontend/src/store/whiteboard.ts`)
+- **State Management**: Zustand with persist middleware (`frontend/src/store/whiteboard.ts`)
+- **Persistence**: localStorage via zustand/middleware/persist
+- **Undo/Redo**: History stack with 50 states
 - **Real-time**: Socket.IO client (`frontend/src/lib/socket.ts`)
 - **HTTP**: Axios (`frontend/src/lib/api.ts`)
 - **Canvas**: Konva.js for drawing
@@ -50,13 +52,15 @@ alembic upgrade head                  # Run migrations
 
 ### Backend (FastAPI + Python 3.11)
 - **Web Framework**: FastAPI with aiohttp async mode
-- **Real-time**: python-socketio with AsyncServer (see `active_rooms` dict in main.py)
-- **Database**: SQLAlchemy ORM with PostgreSQL
+- **Real-time**: python-socketio with AsyncServer
+- **Room State**: Redis-backed (with in-memory fallback)
+- **Database**: SQLAlchemy ORM with PostgreSQL (pool_size=20)
 - **Auth**: JWT with python-jose + passlib/bcrypt
 - **AI**: Three providers via `AI_PROVIDER` env var:
   - `mock` - Free, no API key needed (default)
   - `ollama` - Local free model
   - `openai` - Paid GPT-4 quality
+- **Services**: `backend/app/services/room_service.py`
 
 ### API Routes (`backend/app/routes/`)
 - `/auth/*` - Authentication (register, login, logout, me)
@@ -67,27 +71,51 @@ alembic upgrade head                  # Run migrations
 - **Client → Server**: `join_room`, `draw`, `cursor_move`, `delete_object`, `clear_room`, `leave_room`
 - **Server → Client**: `room_data`, `object_drawn`, `object_deleted`, `room_cleared`, `cursor_moved`, `users_update`
 
+### Security
+- Socket.IO requires JWT token in `auth.token`
+- Room membership validated on join
+- Only room owner can delete rooms (returns 403)
+
 ## Environment Variables
 
 ### Frontend (`.env.local`)
 ```
+# Development
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_SOCKET_URL=http://localhost:8000
+
+# Production (Cloudflare Pages)
+NEXT_PUBLIC_API_URL=https://lumo-api-m7w6.onrender.com
+NEXT_PUBLIC_SOCKET_URL=https://lumo-api-m7w6.onrender.com
 ```
 
 ### Backend (`.env`)
 ```
-DATABASE_URL=postgresql://user:pass@localhost:5432/lumo_db
-AI_PROVIDER=mock       # mock, openai, or ollama
-OPENAI_API_KEY=        # required if AI_PROVIDER=openai
-OLLAMA_URL=http://127.0.0.1:11434
-OLLAMA_MODEL=llama3.1:8b
+DATABASE_URL=postgresql://user:pass@HOST/DBNAME
+REDIS_URL=redis://HOST:6379/0
+AI_PROVIDER=openai
+OPENAI_API_KEY=sk-...
 SECRET_KEY=your-secret-key
 ```
 
+## Database Migrations
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+Migration files are in `backend/alembic/versions/`.
+
 ## Access Points
+
+### Development
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
 - Database: localhost:5432 (PostgreSQL)
 - Redis: localhost:6379
+
+### Production
+- Frontend: https://eraser-eb0.pages.dev
+- Backend: https://lumo-api-m7w6.onrender.com

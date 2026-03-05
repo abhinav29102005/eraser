@@ -29,19 +29,20 @@ async def create_room(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    # Create room
-    new_room = Room(name=room.name)
-    
+    """Create a new room. The creator becomes the owner."""
+    # Create room with owner
+    new_room = Room(name=room.name, owner_id=user_id)
+
     # Add current user to room
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
+
     new_room.users.append(user)
     db.add(new_room)
     db.commit()
     db.refresh(new_room)
-    
+
     return new_room
 
 
@@ -53,7 +54,7 @@ async def get_rooms(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
+
     return user.rooms
 
 
@@ -66,10 +67,10 @@ async def get_room(
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+
     # Auto-join: any authenticated user with the link can access & collaborate
     _ensure_room_member(db, room, user_id)
-    
+
     return room
 
 
@@ -83,7 +84,7 @@ async def join_room(
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+
     _ensure_room_member(db, room, user_id)
     return room
 
@@ -95,14 +96,22 @@ async def update_room(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """Update room details. Only owner can update."""
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+
+    # Check ownership for updates
+    if room.owner_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only room owner can update room"
+        )
+
     room.name = room_update.name
     db.commit()
     db.refresh(room)
-    
+
     return room
 
 
@@ -112,13 +121,21 @@ async def delete_room(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """Delete a room. Only the owner can delete the room."""
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+
+    # Authorization: Only owner can delete
+    if room.owner_id != user_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only room owner can delete room"
+        )
+
     db.delete(room)
     db.commit()
-    
+
     return {"message": "Room deleted"}
 
 
@@ -133,7 +150,10 @@ async def add_object(
     room = db.query(Room).filter(Room.id == room_id).first()
     if not room:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Room not found")
-    
+
+    # Verify membership
+    _ensure_room_member(db, room, user_id)
+
     # Create drawing object
     new_obj = DrawingObject(
         room_id=room_id,
@@ -146,11 +166,11 @@ async def add_object(
         stroke_width=obj.stroke_width,
         timestamp=int(time.time())
     )
-    
+
     db.add(new_obj)
     db.commit()
     db.refresh(new_obj)
-    
+
     return new_obj
 
 
@@ -166,19 +186,19 @@ async def update_object(
         DrawingObject.id == object_id,
         DrawingObject.room_id == room_id
     ).first()
-    
+
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
-    
+
     obj.x = obj_update.x
     obj.y = obj_update.y
     obj.data = obj_update.data
     obj.color = obj_update.color
     obj.stroke_width = obj_update.stroke_width
-    
+
     db.commit()
     db.refresh(obj)
-    
+
     return obj
 
 
@@ -193,13 +213,13 @@ async def delete_object(
         DrawingObject.id == object_id,
         DrawingObject.room_id == room_id
     ).first()
-    
+
     if not obj:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Object not found")
-    
+
     db.delete(obj)
     db.commit()
-    
+
     return {"message": "Object deleted"}
 
 

@@ -52,6 +52,7 @@ class RoomCreate(BaseModel):
 class RoomResponse(BaseModel):
     id: str
     name: str
+    owner_id: Optional[str] = None
     created_at: datetime
     objects: List[DrawingObject] = []
 

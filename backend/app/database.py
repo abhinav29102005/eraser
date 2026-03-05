@@ -1,9 +1,9 @@
+import os
 from sqlalchemy import create_engine, Column, String, DateTime, Float, JSON, Integer, BigInteger, ForeignKey, Table
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from datetime import datetime
 import uuid
-import os
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 
@@ -12,9 +12,17 @@ DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./test.db")
 if DATABASE_URL.startswith("postgresql://") and "+psycopg" not in DATABASE_URL:
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
+# Connection pool settings for production PostgreSQL
+is_postgres = "postgresql" in DATABASE_URL
+
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
+    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    # Production-grade connection pool
+    pool_size=20 if is_postgres else 5,
+    max_overflow=10 if is_postgres else 5,
+    pool_pre_ping=True,
+    pool_recycle=3600,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -37,7 +45,7 @@ class User(Base):
     name = Column(String)
     hashed_password = Column(String)
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     rooms = relationship("Room", secondary=room_users, back_populates="users")
     drawing_objects = relationship("DrawingObject", back_populates="user", cascade="all, delete-orphan")
     ai_prompts = relationship("AIPrompt", back_populates="user", cascade="all, delete-orphan")
@@ -48,8 +56,9 @@ class Room(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String, index=True)
+    owner_id = Column(String, index=True)  # Track room owner
     created_at = Column(DateTime, default=datetime.utcnow)
-    
+
     users = relationship("User", secondary=room_users, back_populates="rooms")
     objects = relationship("DrawingObject", back_populates="room", cascade="all, delete-orphan")
 
@@ -58,7 +67,7 @@ class DrawingObject(Base):
     __tablename__ = "drawing_objects"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    room_id = Column(String, ForeignKey("rooms.id"))
+    room_id = Column(String, ForeignKey("rooms.id"), index=True)
     user_id = Column(String, ForeignKey("users.id"))
     type = Column(String)
     x = Column(Float)
@@ -67,7 +76,7 @@ class DrawingObject(Base):
     color = Column(String, nullable=True)
     stroke_width = Column(Float, nullable=True)
     timestamp = Column(BigInteger)
-    
+
     room = relationship("Room", back_populates="objects")
     user = relationship("User", back_populates="drawing_objects")
 
@@ -81,7 +90,7 @@ class AIPrompt(Base):
     prompt = Column(String)
     result = Column(String)
     timestamp = Column(BigInteger)
-    
+
     user = relationship("User", back_populates="ai_prompts")
 
 
@@ -104,7 +113,7 @@ def migrate_timestamp_columns():
                 """)
             except Exception:
                 pass  # Column already BIGINT or doesn't exist
-            
+
             try:
                 connection.execute("""
                     ALTER TABLE ai_prompts ALTER COLUMN timestamp TYPE BIGINT;
