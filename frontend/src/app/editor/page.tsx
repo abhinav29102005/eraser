@@ -83,6 +83,7 @@ export default function EditorPage() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState('');
   const [aiSvgData, setAiSvgData] = useState<AIDiagramSVGResult | null>(null);
+  const [mermaidPreview, setMermaidPreview] = useState<string | null>(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [layout, setLayout] = useState<'canvas' | 'doc' | 'both'>('both');
   const [docContent, setDocContent] = useState('');
@@ -161,11 +162,23 @@ export default function EditorPage() {
     setAiLoading(true);
     setAiSvgData(null);
     setAiResult('');
+    setMermaidPreview(null);
     try {
       const res = await aiAPI.generateDiagramVisual(aiPrompt);
       const data: AIDiagramSVGResult = res.data;
       setAiSvgData(data);
       setAiResult(data.message || 'Diagram generated!');
+      
+      // If it's a Mermaid diagram, render preview
+      if (data.type === 'mermaid' && data.mermaid) {
+        try {
+          const { svg } = await mermaid.render('mermaid-preview-' + Date.now(), data.mermaid);
+          setMermaidPreview(svg);
+        } catch (err) {
+          console.error('Failed to render Mermaid preview:', err);
+        }
+      }
+      
       toast.success('AI visual generated ✨');
     } catch {
       // Fallback to text-only diagram endpoint
@@ -183,25 +196,39 @@ export default function EditorPage() {
     if (!aiSvgData) return;
     
     let svgString: string | null = null;
-    let width = 500;
-    let height = 350;
+    let width = 600;
+    let height = 400;
 
     try {
       // If it's a Mermaid diagram, convert it to SVG first
       if (aiSvgData.type === 'mermaid' && aiSvgData.mermaid) {
-        const { svg } = await mermaid.render('mermaid-diagram', aiSvgData.mermaid);
+        const { svg } = await mermaid.render('mermaid-diagram-' + Date.now(), aiSvgData.mermaid);
         svgString = svg;
+        
         // Try to extract dimensions from the rendered SVG
-        const match = svg.match(/viewBox="0 0 (\d+) (\d+)"/);
-        if (match) {
-          width = parseInt(match[1], 10);
-          height = parseInt(match[2], 10);
+        const viewBoxMatch = svg.match(/viewBox="0 0 ([\d.]+) ([\d.]+)"/);
+        const widthMatch = svg.match(/width="([\d.]+)"/);
+        const heightMatch = svg.match(/height="([\d.]+)"/);
+        
+        if (viewBoxMatch) {
+          width = parseFloat(viewBoxMatch[1]);
+          height = parseFloat(viewBoxMatch[2]);
+        } else if (widthMatch && heightMatch) {
+          width = parseFloat(widthMatch[1]);
+          height = parseFloat(heightMatch[1]);
         }
+        
+        // Scale up Mermaid diagrams for better visibility (2x scale)
+        // and ensure minimum dimensions
+        const scaleFactor = 2;
+        width = Math.max(width * scaleFactor, 600);
+        height = Math.max(height * scaleFactor, 400);
+        
       } else if (aiSvgData.svg) {
         // Use existing SVG
         svgString = aiSvgData.svg;
-        width = aiSvgData.width || 500;
-        height = aiSvgData.height || 350;
+        width = aiSvgData.width || 600;
+        height = aiSvgData.height || 400;
       } else {
         toast.error('No diagram data available');
         return;
@@ -248,7 +275,10 @@ export default function EditorPage() {
         stroke_width: 0,
       }).catch(() => {});
 
-      toast.success('Diagram added to canvas!');
+      toast.success('Diagram added to canvas! 🎨 You can now move and resize it.');
+      
+      // Auto-select the newly added diagram for immediate interaction
+      setSelectedIds([el.id]);
     } catch (error) {
       console.error('Failed to render diagram:', error);
       toast.error('Failed to render diagram on canvas');
@@ -596,21 +626,45 @@ export default function EditorPage() {
               {/* Mermaid/SVG preview + Add to Canvas */}
               {(aiSvgData?.mermaid || aiSvgData?.svg) && (
                 <div className="space-y-3">
-                  <div className="bg-surface-800 border border-surface-700 rounded-xl p-2 overflow-hidden">
-                    <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold mb-2 px-1">
-                      {aiSvgData.type === 'mermaid' ? 'Mermaid Diagram' : 'Preview'}
-                    </p>
-                    {aiSvgData.type === 'mermaid' && aiSvgData.mermaid ? (
-                      <div className="bg-[#1e1e2e] rounded-lg p-3 overflow-auto">
-                        <pre className="text-xs text-surface-300 font-mono whitespace-pre-wrap">{aiSvgData.mermaid}</pre>
+                  <div className="bg-surface-800 border border-surface-700 rounded-xl p-3 overflow-hidden">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-[10px] text-surface-500 uppercase tracking-wider font-semibold">
+                        {aiSvgData.type === 'mermaid' ? '📊 Mermaid Diagram' : 'Preview'}
+                      </p>
+                      {aiSvgData.type === 'mermaid' && (
+                        <span className="text-[9px] px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-400 font-semibold">
+                          Interactive
+                        </span>
+                      )}
+                    </div>
+                    
+                    {/* Visual Preview */}
+                    {aiSvgData.type === 'mermaid' && mermaidPreview ? (
+                      <div className="bg-[#1e1e2e] rounded-lg p-4 overflow-auto max-h-80">
+                        <div
+                          className="flex items-center justify-center"
+                          dangerouslySetInnerHTML={{ __html: mermaidPreview }}
+                        />
                       </div>
                     ) : aiSvgData.svg ? (
                       <div
-                        className="rounded-lg overflow-hidden bg-[#1e1e2e] flex items-center justify-center"
+                        className="rounded-lg overflow-hidden bg-[#1e1e2e] flex items-center justify-center p-4"
                         dangerouslySetInnerHTML={{ __html: aiSvgData.svg }}
-                        style={{ maxHeight: 220 }}
+                        style={{ maxHeight: 320 }}
                       />
                     ) : null}
+                    
+                    {/* Show code in collapsible section for Mermaid */}
+                    {aiSvgData.type === 'mermaid' && aiSvgData.mermaid && (
+                      <details className="mt-3">
+                        <summary className="text-[10px] text-surface-400 cursor-pointer hover:text-surface-300 transition-colors">
+                          View Mermaid Code
+                        </summary>
+                        <div className="mt-2 bg-surface-900/50 rounded p-2 overflow-auto max-h-32">
+                          <pre className="text-[10px] text-surface-300 font-mono whitespace-pre-wrap">{aiSvgData.mermaid}</pre>
+                        </div>
+                      </details>
+                    )}
                   </div>
                   <button
                     onClick={handleAddSvgToCanvas}
@@ -619,6 +673,9 @@ export default function EditorPage() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                     Add to Canvas
                   </button>
+                  <p className="text-[10px] text-surface-500 text-center">
+                    💡 Once added, you can <span className="text-brand-400 font-semibold">move, resize, and rotate</span> the diagram
+                  </p>
                 </div>
               )}
 
