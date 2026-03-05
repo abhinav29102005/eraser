@@ -105,7 +105,7 @@ async def generate_diagram_visual_endpoint(
     user_id: str = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Generate an SVG vector diagram and a humanized message."""
+    """Generate a Mermaid diagram and a humanized message."""
     try:
         data = await generate_diagram_svg(request.prompt)
 
@@ -113,7 +113,7 @@ async def generate_diagram_visual_endpoint(
         ai_prompt = AIPrompt(
             user_id=user_id,
             prompt=request.prompt,
-            result=data["svg"],
+            result=data["mermaid"],
             timestamp=int(time.time())
         )
         db.add(ai_prompt)
@@ -123,10 +123,9 @@ async def generate_diagram_visual_endpoint(
         return {
             "id": ai_prompt.id,
             "prompt": request.prompt,
-            "svg": data["svg"],
+            "mermaid": data["mermaid"],
             "message": data["message"],
-            "width": data["width"],
-            "height": data["height"],
+            "type": "mermaid",
             "timestamp": ai_prompt.timestamp,
         }
     except Exception as e:

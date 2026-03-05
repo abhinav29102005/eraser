@@ -42,17 +42,25 @@ async def _ollama_chat(prompt: str, system: str) -> str:
 
 
 def _mock_diagram(prompt: str) -> str:
-    return (
-        "[FREE AI MODE]\n"
-        "Use this scaffold and refine manually:\n\n"
-        f"Diagram topic: {prompt}\n"
-        "┌───────────────┐    ┌───────────────┐\n"
-        "│   Client UI   │───▶│   API Server  │\n"
-        "└───────────────┘    └───────────────┘\n"
-        "         │                    │\n"
-        "         ▼                    ▼\n"
-        "   Real-time WS         Database/Cache\n"
-    )
+    """Generate a Mermaid diagram template based on prompt keywords."""
+    keywords = prompt.split()[:4]
+    
+    # Basic Mermaid flowchart template
+    mermaid_code = "graph TD\n"
+    
+    if len(keywords) >= 2:
+        # Create a simple flow diagram
+        mermaid_code += f'    A["{keywords[0].capitalize()}"] --> B["{keywords[1].capitalize()}"]\n'
+        if len(keywords) >= 3:
+            mermaid_code += f'    B --> C["{keywords[2].capitalize()}"]\n'
+        if len(keywords) >= 4:
+            mermaid_code += f'    C --> D["{keywords[3].capitalize()}"]\n'
+    else:
+        # Fallback simple template
+        mermaid_code += '    A["Client"] --> B["Server"]\n'
+        mermaid_code += '    B --> C["Database"]\n'
+    
+    return mermaid_code
 
 
 def _humanize_response(prompt: str, extra: str = "") -> str:
@@ -166,7 +174,7 @@ def _mock_suggestions(content: str) -> str:
 
 
 async def generate_diagram(prompt: str) -> str:
-    """Generate a diagram based on text prompt.
+    """Generate a Mermaid diagram based on text prompt.
 
     Providers:
     - openai (paid)
@@ -181,21 +189,24 @@ async def generate_diagram(prompt: str) -> str:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert at creating ASCII diagrams and describing visual layouts.",
+                        "content": """You are an expert at creating Mermaid diagrams. 
+Generate clean, professional Mermaid diagram syntax. Choose the best diagram type (flowchart, graph, sequence, state, class, etc.) based on the prompt.
+Return ONLY valid Mermaid syntax without markdown code blocks or explanations.""",
                     },
                     {
                         "role": "user",
-                        "content": f"Create an ASCII diagram for: {prompt}",
+                        "content": f"Create a Mermaid diagram for: {prompt}",
                     },
                 ],
-                max_tokens=800,
+                max_tokens=1000,
             )
             return response.choices[0].message.content or ""
 
         if provider == "ollama":
             return await _ollama_chat(
-                f"Create an ASCII diagram for: {prompt}",
-                "You are an expert at creating concise ASCII diagrams.",
+                f"Create a Mermaid diagram for: {prompt}",
+                """You are an expert at creating Mermaid diagrams. Generate clean, professional Mermaid syntax.
+Choose the best diagram type based on the prompt. Return ONLY valid Mermaid code without markdown blocks.""",
             )
 
         return _mock_diagram(prompt)
@@ -271,12 +282,12 @@ async def suggest_edits(content: str) -> str:
 
 
 async def generate_diagram_svg(prompt: str) -> dict:
-    """Generate an SVG vector diagram + humanized explanation.
+    """Generate a Mermaid diagram + humanized explanation.
 
-    Returns {"svg": "<svg …>", "message": "…", "width": int, "height": int}.
+    Returns {"mermaid": "mermaid code...", "message": "…", "type": "mermaid"}.
     """
     provider = _resolve_provider()
-    svg = ""
+    mermaid_code = ""
     try:
         if provider == "openai" and client:
             response = await client.chat.completions.create(
@@ -285,56 +296,45 @@ async def generate_diagram_svg(prompt: str) -> dict:
                     {
                         "role": "system",
                         "content": (
-                            "You are a vector-graphics expert. "
-                            "Return ONLY a valid SVG string (starting with <svg and ending with </svg>). "
-                            "Use a dark background (#1e1e2e), colourful rounded boxes for nodes, "
-                            "labelled arrows between them, and a clean modern style. "
-                            "Keep the viewBox under 800x600. Do NOT include any explanation text outside the SVG tags."
+                            "You are an expert at creating professional Mermaid diagrams. "
+                            "Return ONLY valid Mermaid syntax without markdown code blocks. "
+                            "Choose the best diagram type (flowchart, graph, sequence, state, class, etc.) based on the prompt. "
+                            "Use clear labels, logical flow, and proper Mermaid syntax. "
+                            "Make diagrams professional and suitable for technical documentation."
                         ),
                     },
                     {
                         "role": "user",
-                        "content": f"Create an SVG diagram for: {prompt}",
+                        "content": f"Create a Mermaid diagram for: {prompt}",
                     },
                 ],
-                max_tokens=2000,
+                max_tokens=1500,
             )
-            raw = response.choices[0].message.content or ""
-            # Extract the SVG portion
-            start = raw.find("<svg")
-            end = raw.rfind("</svg>")
-            if start != -1 and end != -1:
-                svg = raw[start : end + 6]
+            mermaid_code = response.choices[0].message.content or ""
+            # Clean up if wrapped in markdown code blocks
+            mermaid_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
 
         elif provider == "ollama":
-            raw = await _ollama_chat(
-                f"Create an SVG diagram for: {prompt}",
+            mermaid_code = await _ollama_chat(
+                f"Create a Mermaid diagram for: {prompt}",
                 (
-                    "Return ONLY a valid SVG string (starting with <svg and ending with </svg>). "
-                    "Use a dark background (#1e1e2e), colourful rounded boxes for nodes, "
-                    "labelled arrows, modern style. Keep viewBox under 800x600."
+                    "You are an expert at creating professional Mermaid diagrams. "
+                    "Return ONLY valid Mermaid syntax without markdown blocks. "
+                    "Choose the best diagram type based on the prompt."
                 ),
             )
-            start = raw.find("<svg")
-            end = raw.rfind("</svg>")
-            if start != -1 and end != -1:
-                svg = raw[start : end + 6]
+            mermaid_code = mermaid_code.replace("```mermaid", "").replace("```", "").strip()
     except Exception as e:
-        print(f"AI SVG Error: {e}")
+        print(f"AI Mermaid Error: {e}")
 
-    # Fallback to deterministic mock SVG
-    if not svg or "<svg" not in svg:
-        svg = _build_mock_svg(prompt)
+    # Fallback to mock Mermaid diagram
+    if not mermaid_code or "graph" not in mermaid_code.lower():
+        mermaid_code = _mock_diagram(prompt)
 
-    # Parse width/height from the SVG
-    w, h = 600, 400
-    import re
-    wm = re.search(r'width="(\d+)"', svg)
-    hm = re.search(r'height="(\d+)"', svg)
-    if wm:
-        w = int(wm.group(1))
-    if hm:
-        h = int(hm.group(1))
+    message = _humanize_response(prompt, "I've created a Mermaid diagram for you!")
 
-    message = _humanize_response(prompt)
-    return {"svg": svg, "message": message, "width": w, "height": h}
+    return {
+        "mermaid": mermaid_code,
+        "message": message,
+        "type": "mermaid",
+    }

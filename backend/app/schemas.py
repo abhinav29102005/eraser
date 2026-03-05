@@ -73,10 +73,9 @@ class AIPromptResponse(BaseModel):
 class AIDiagramSVGResponse(BaseModel):
     id: str
     prompt: str
-    svg: str
+    mermaid: str
     message: str
-    width: int
-    height: int
+    type: str = "mermaid"
     timestamp: int
 
 
