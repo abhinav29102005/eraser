@@ -1,7 +1,9 @@
 import os
+import re
 import httpx
 import importlib
 import logging
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -63,107 +65,427 @@ async def _ollama_chat(prompt: str, system: str) -> str:
         return data.get("message", {}).get("content", "")
 
 
+class MermaidDiagramGenerator:
+    """Pure algorithmic Mermaid diagram generator - no hardcoded templates."""
+
+    # Diagram type patterns
+    DIAGRAM_PATTERNS = {
+        'flowchart': ['flow', 'process', 'step', 'workflow', 'roadmap', 'path', 'learning', 'guide', 'progress', 'stages', 'phases'],
+        'sequence': ['sequence', 'order', 'timeline', 'flow', 'interaction', 'request', 'response', 'call', 'api'],
+        'class': ['class', 'model', 'structure', 'object', 'inherit', 'uml', 'schema', 'database'],
+        'state': ['state', 'status', 'mode', 'condition', 'finite', 'machine', 'stage'],
+        'entity': ['er', 'entity', 'relationship', 'database', 'schema', 'table', 'model'],
+        'mindmap': ['mind', 'brainstorm', 'concept', 'idea', 'topic', 'central', 'root'],
+        'architecture': ['system', 'architecture', 'service', 'microservice', 'backend', 'frontend', 'infrastructure', 'deploy'],
+        'network': ['network', 'server', 'client', 'cloud', 'aws', 'azure', 'infrastructure', '拓扑'],
+    }
+
+    # Category keywords for intelligent grouping
+    CATEGORY_KEYWORDS = {
+        'foundation': ['basic', 'fundament', 'intro', 'begin', 'start', 'core', 'essential', 'base'],
+        'intermediate': ['medium', 'mid', 'moderate', 'advance'],
+        'advanced': ['expert', 'pro', 'master', 'senior', 'specialize'],
+        'frontend': ['ui', 'web', 'browser', 'react', 'vue', 'angular', 'html', 'css', 'javascript'],
+        'backend': ['server', 'api', 'database', 'logic', 'business', 'java', 'python', 'node', 'rust'],
+        'devops': ['deploy', 'ci/cd', 'docker', 'kubernetes', 'cloud', 'aws', 'devops', 'infrastructure'],
+        'data': ['data', 'analytics', 'ml', 'ai', 'machine', 'learning', 'big', 'warehouse'],
+        'security': ['security', 'auth', 'oauth', 'jwt', 'encryption', 'ssl', 'tls', 'permission'],
+    }
+
+    def __init__(self, prompt: str):
+        self.prompt = prompt.lower()
+        self.words = prompt.split()
+        self.diagram_type = self._detect_diagram_type()
+        self.categories = self._detect_categories()
+        self.entities = self._extract_entities()
+
+    def _detect_diagram_type(self) -> str:
+        """Detect the best diagram type based on prompt analysis."""
+        scores = {dtype: 0 for dtype in self.DIAGRAM_PATTERNS}
+
+        for dtype, patterns in self.DIAGRAM_PATTERNS.items():
+            for pattern in patterns:
+                if pattern in self.prompt:
+                    scores[dtype] += 2
+                    # Check for compound matches
+                    if any(p in self.prompt for p in [f'{pattern}chart', f'{pattern}diagram']):
+                        scores[dtype] += 1
+
+        # Special cases
+        if 'flowchart' in self.prompt or 'flow chart' in self.prompt:
+            scores['flowchart'] += 3
+        if 'mindmap' in self.prompt or 'mind map' in self.prompt:
+            scores['mindmap'] += 3
+
+        # Return highest scoring type
+        best_type = max(scores, key=scores.get)
+        return best_type if scores[best_type] > 0 else 'flowchart'
+
+    def _detect_categories(self) -> list:
+        """Detect categories/topics in the prompt."""
+        categories = []
+        for cat, keywords in self.CATEGORY_KEYWORDS.items():
+            for kw in keywords:
+                if kw in self.prompt:
+                    categories.append(cat)
+                    break
+        return categories
+
+    def _extract_entities(self) -> list:
+        """Extract meaningful entities from the prompt."""
+        # Common technical terms to look for
+        common_terms = [
+            'api', 'database', 'server', 'client', 'user', 'auth', 'login', 'register',
+            'admin', 'dashboard', 'payment', 'order', 'product', 'service', 'cache',
+            'queue', 'worker', 'gateway', 'router', 'controller', 'model', 'view',
+            'frontend', 'backend', 'mobile', 'web', 'desktop', 'cloud', 'deploy',
+            'test', 'build', 'release', 'monitor', 'log', 'metric', 'alert',
+            'security', 'encryption', 'token', 'session', 'cookie',
+            'microservice', 'monolith', 'architecture', 'system', 'component',
+            'module', 'package', 'library', 'framework', 'sdk', 'cli',
+            'git', 'github', 'gitlab', 'ci', 'cd', 'pipeline', 'docker', 'kubernetes',
+            'aws', 'azure', 'gcp', 'firebase', 'vercel', 'netlify',
+            'react', 'vue', 'angular', 'next', 'svelte', 'node', 'python', 'java',
+            'rust', 'go', 'typescript', 'javascript', 'sql', 'nosql', 'mongodb', 'postgres',
+            'redis', 'elasticsearch', 'kafka', 'rabbitmq', 'websocket', 'grpc', 'rest',
+            'graphql', 'oauth', 'jwt', 'saml', 'ldap', 'kerberos',
+        ]
+
+        # Extract words that might be entities (3+ chars, not common stopwords)
+        stopwords = {'the', 'and', 'for', 'with', 'from', 'that', 'this', 'are', 'have', 'has', 'was', 'were', 'been', 'being', 'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'need', 'want', 'like', 'just', 'about', 'into', 'over', 'under', 'after', 'before', 'between', 'through', 'during', 'above', 'below', 'then', 'than', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'only', 'own', 'same', 'so', 'too', 'very', 'also'}
+
+        entities = []
+        for word in self.words:
+            clean_word = word.strip(',.!?;:"\'()[]{}').lower()
+            if len(clean_word) >= 2:
+                # Check if it's a known term
+                if clean_word in common_terms:
+                    entities.append(clean_word)
+                # Or capitalize and add if it looks like a proper noun
+                elif clean_word[0].isupper() or (clean_word.isalpha() and len(clean_word) > 3 and clean_word not in stopwords):
+                    entities.append(clean_word)
+
+        # Add any multi-word phrases from the prompt
+        phrases = ['data structure', 'machine learning', 'system design', 'software architecture',
+                   'ci cd pipeline', 'rest api', 'graphql api', 'user interface', 'user experience',
+                   'single page application', 'progressive web app', 'domain driven design',
+                   'test driven development', 'clean code', 'design pattern']
+        for phrase in phrases:
+            if phrase in self.prompt:
+                entities.append(phrase.replace(' ', '_'))
+
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_entities = []
+        for e in entities:
+            if e not in seen:
+                seen.add(e)
+                unique_entities.append(e)
+
+        return unique_entities[:12]  # Limit to 12 entities max
+
+    def _create_flowchart(self) -> str:
+        """Create a flowchart diagram with intelligent layout."""
+        lines = ["flowchart LR"]
+
+        if not self.entities:
+            self.entities = ['Start', 'Process', 'End']
+
+        # Group entities into clusters based on categories
+        clusters = self._group_into_clusters()
+
+        if clusters:
+            # Use subgraphs for clusters
+            for i, cluster in enumerate(clusters):
+                subgraph_name = f"Cluster_{i}"
+                lines.append(f"    subgraph {subgraph_name}")
+                for entity in cluster:
+                    safe_id = self._safe_id(entity)
+                    lines.append(f"        {safe_id}[\"{self._format_label(entity)}\"]")
+                lines.append("    end")
+
+            # Connect clusters sequentially
+            for i in range(len(clusters) - 1):
+                lines.append(f"    Cluster_{i} --> Cluster_{i+1}")
+        else:
+            # Simple linear flow
+            for i, entity in enumerate(self.entities):
+                safe_id = self._safe_id(entity)
+                lines.append(f"    {safe_id}[\"{self._format_label(entity)}\"]")
+
+            # Connect sequentially
+            for i in range(len(self.entities) - 1):
+                lines.append(f"    {self._safe_id(self.entities[i])} --> {self._safe_id(self.entities[i+1])}")
+
+        return '\n'.join(lines)
+
+    def _create_architecture_diagram(self) -> str:
+        """Create a system architecture diagram."""
+        lines = ["flowchart TD"]
+
+        if not self.entities:
+            self.entities = ['Client', 'Server', 'Database']
+
+        # Identify client and server components
+        client_entities = [e for e in self.entities if e in ['client', 'frontend', 'web', 'mobile', 'browser', 'ui']]
+        server_entities = [e for e in self.entities if e in ['server', 'backend', 'api', 'service', 'gateway']]
+        data_entities = [e for e in self.entities if e in ['database', 'db', 'cache', 'storage', 'redis', 'mongodb', 'postgres', 'sql']]
+
+        # If no specific categorization, infer from prompt
+        if not client_entities and not server_entities:
+            client_entities = self.entities[:1] if self.entities else ['Client']
+            server_entities = self.entities[1:3] if len(self.entities) > 1 else ['API']
+            data_entities = self.entities[3:4] if len(self.entities) > 3 else ['Database']
+
+        # Add clients
+        if client_entities:
+            lines.append("    subgraph Client_Layer")
+            for e in client_entities:
+                lines.append(f"        C{client_entities.index(e)}[\"{self._format_label(e)}\"]")
+            lines.append("    end")
+
+        # Add servers
+        if server_entities:
+            lines.append("    subgraph Server_Layer")
+            for e in server_entities:
+                idx = server_entities.index(e)
+                lines.append(f"        S{idx}[\"{self._format_label(e)}\"]")
+            lines.append("    end")
+
+        # Add data layer
+        if data_entities:
+            lines.append("    subgraph Data_Layer")
+            for e in data_entities:
+                idx = data_entities.index(e)
+                lines.append(f"        D{idx}[(\"{self._format_label(e)}\")]")
+            lines.append("    end")
+
+        # Connect layers
+        if client_entities and server_entities:
+            lines.append(f"    C0 --> S0")
+        if server_entities and data_entities:
+            lines.append(f"    S0 --> D0")
+        if client_entities and data_entities and not server_entities:
+            lines.append(f"    C0 --> D0")
+
+        return '\n'.join(lines)
+
+    def _create_sequence(self) -> str:
+        """Create a sequence diagram."""
+        lines = ["sequenceDiagram"]
+
+        if not self.entities:
+            self.entities = ['Client', 'Server', 'Database']
+
+        # Create participants
+        for entity in self.entities:
+            safe_id = self._safe_id(entity)
+            lines.append(f"    participant {safe_id} as {self._format_label(entity)}")
+
+        # Create sequence flow
+        for i in range(len(self.entities) - 1):
+            curr = self._safe_id(self.entities[i])
+            next_ent = self._safe_id(self.entities[i + 1])
+            lines.append(f"    {curr}->>+{next_ent}: Request")
+            lines.append(f"    {next_ent}-->>-{curr}: Response")
+
+        return '\n'.join(lines)
+
+    def _create_class_diagram(self) -> str:
+        """Create a class diagram."""
+        lines = ["classDiagram"]
+
+        if not self.entities:
+            self.entities = ['User', 'Service', 'Repository']
+
+        # Create classes
+        for entity in self.entities:
+            safe_id = self._safe_id(entity)
+            lines.append(f"    class {safe_id} {{")
+            lines.append(f"        +id: string")
+            lines.append(f"        +name: string")
+            lines.append(f"        +created_at: datetime")
+            lines.append(f"        +create()")
+            lines.append(f"        +read()")
+            lines.append(f"        +update()")
+            lines.append(f"        +delete()")
+            lines.append("    }")
+
+        # Create relationships
+        for i in range(len(self.entities) - 1):
+            lines.append(f"    {self._safe_id(self.entities[i])} --|> {self._safe_id(self.entities[i+1])}")
+
+        return '\n'.join(lines)
+
+    def _create_state_diagram(self) -> str:
+        """Create a state diagram."""
+        lines = ["stateDiagram-v2"]
+
+        if not self.entities:
+            self.entities = ['Active', 'Processing', 'Complete']
+
+        lines.append("    [*] --> " + self._safe_id(self.entities[0]))
+
+        for i in range(len(self.entities) - 1):
+            lines.append(f"    {self._safe_id(self.entities[i])} --> {self._safe_id(self.entities[i+1])}")
+
+        lines.append(f"    {self._safe_id(self.entities[-1])} --> [*]")
+
+        return '\n'.join(lines)
+
+    def _create_mindmap(self) -> str:
+        """Create a mindmap diagram."""
+        lines = ["mindmap"]
+
+        # Root is the first meaningful word from prompt
+        root = "Root"
+        for word in self.prompt.split():
+            if len(word) > 3 and word not in ['this', 'that', 'with', 'from']:
+                root = word.capitalize()
+                break
+
+        lines.append(f"    root(({root}))")
+
+        if not self.entities:
+            self.entities = ['Concept 1', 'Concept 2', 'Concept 3']
+
+        # Create branches
+        for entity in self.entities:
+            lines.append(f"        {self._format_label(entity)}")
+
+        return '\n'.join(lines)
+
+    def _create_entity_relationship(self) -> str:
+        """Create an ER diagram."""
+        lines = ["erDiagram"]
+
+        if not self.entities:
+            self.entities = ['User', 'Order', 'Product']
+
+        # Create entities with attributes
+        for entity in self.entities:
+            safe_id = self._safe_id(entity)
+            lines.append(f"    {safe_id} {{")
+            lines.append(f"        int id PK")
+            lines.append(f"        string name")
+            lines.append(f"        datetime created_at")
+            lines.append("    }")
+
+        # Create relationships
+        for i in range(len(self.entities) - 1):
+            lines.append(f"    {self._safe_id(self.entities[i])} ||--o{{ {self._safe_id(self.entities[i+1])} : \"has\"")
+
+        return '\n'.join(lines)
+
+    def _create_network_diagram(self) -> str:
+        """Create a network topology diagram."""
+        lines = ["flowchart TB"]
+
+        if not self.entities:
+            self.entities = ['Internet', 'Load Balancer', 'App Server', 'Database']
+
+        # Group into network zones
+        external = [e for e in self.entities if e in ['internet', 'client', 'user', 'cdn', 'dns']]
+        dmz = [e for e in self.entities if e in ['load', 'balancer', 'gateway', 'proxy', 'firewall']]
+        app = [e for e in self.entities if e in ['server', 'app', 'application', 'service', 'api', 'container', 'pod']]
+        data = [e for e in self.entities if e in ['database', 'db', 'storage', 'cache', 'redis']]
+
+        # Build the diagram
+        if external:
+            lines.append("    subgraph External")
+            for e in external:
+                lines.append(f"        ext[(\"{self._format_label(e)}\")]")
+            lines.append("    end")
+
+        if dmz:
+            lines.append("    subgraph DMZ")
+            for e in dmz:
+                lines.append(f"        dmz[\"{self._format_label(e)}\"]")
+            lines.append("    end")
+
+        if app:
+            lines.append("    subgraph Application")
+            for e in app:
+                lines.append(f"        app[\"{self._format_label(e)}\"]")
+            lines.append("    end")
+
+        if data:
+            lines.append("    subgraph Data")
+            for e in data:
+                lines.append(f"        db[(\"{self._format_label(e)}\")]")
+            lines.append("    end")
+
+        # Connect zones
+        if external and dmz:
+            lines.append("    ext --> dmz")
+        elif external and app:
+            lines.append("    ext --> app")
+        if dmz and app:
+            lines.append("    dmz --> app")
+        if app and data:
+            lines.append("    app --> db")
+
+        return '\n'.join(lines)
+
+    def _group_into_clusters(self) -> list:
+        """Group entities into logical clusters."""
+        if len(self.entities) <= 3:
+            return []
+
+        # Create clusters based on semantic similarity
+        clusters = []
+        current_cluster = []
+
+        for entity in self.entities:
+            # Simple clustering by length and common prefixes
+            if not current_cluster:
+                current_cluster.append(entity)
+            elif len(current_cluster) < 4:  # Max 4 per cluster
+                current_cluster.append(entity)
+            else:
+                clusters.append(current_cluster)
+                current_cluster = [entity]
+
+        if current_cluster:
+            clusters.append(current_cluster)
+
+        return clusters if len(clusters) > 1 else []
+
+    def _safe_id(self, text: str) -> str:
+        """Create a safe Mermaid node ID."""
+        # Remove special characters and create valid ID
+        safe = ''.join(c if c.isalnum() else '_' for c in text.lower())
+        return safe[:20]  # Limit length
+
+    def _format_label(self, text: str) -> str:
+        """Format text as a nice label."""
+        # Replace underscores with spaces and capitalize
+        text = text.replace('_', ' ')
+        if len(text) > 25:
+            text = text[:22] + '...'
+        return text
+
+    def generate(self) -> str:
+        """Generate the appropriate Mermaid diagram based on analysis."""
+        diagram_generators = {
+            'flowchart': self._create_flowchart,
+            'architecture': self._create_architecture_diagram,
+            'sequence': self._create_sequence,
+            'class': self._create_class_diagram,
+            'state': self._create_state_diagram,
+            'mindmap': self._create_mindmap,
+            'entity': self._create_entity_relationship,
+            'network': self._create_network_diagram,
+        }
+
+        generator = diagram_generators.get(self.diagram_type, self._create_flowchart)
+        return generator()
+
+
 def _mock_diagram(prompt: str) -> str:
-    """Generate a Mermaid diagram template based on prompt keywords."""
-    prompt_lower = prompt.lower()
-    
-    # Detect diagram type from prompt
-    if 'dsa' in prompt_lower or 'data structure' in prompt_lower or 'algorithm' in prompt_lower:
-        # DSA Roadmap
-        return """flowchart LR
-    subgraph F[Foundations]
-        F1[Big O Notation]
-        F2[Recursion]
-        F3[Bit Manipulation]
-    end
-    
-    subgraph DS[Data Structures]
-        DS1[Arrays]
-        DS2[Strings]
-        DS3[Linked List]
-        DS4[Stack & Queue]
-        DS5[Hash Table]
-    end
-    
-    subgraph T[Trees]
-        T1[Binary Tree]
-        T2[BST]
-        T3[Tree Traversal]
-        T4[Heap]
-    end
-    
-    subgraph G[Graphs]
-        G1[Graph Representation]
-        G2[BFS & DFS]
-        G3[Shortest Path]
-    end
-    
-    subgraph A[Algorithms]
-        A1[Sorting]
-        A2[Binary Search]
-        A3[Greedy]
-        A4[Backtracking]
-    end
-    
-    subgraph DP[Dynamic Programming]
-        DP1[Memoization]
-        DP2[Tabulation]
-        DP3[Knapsack & LIS]
-    end
-    
-    subgraph AP[Advanced Patterns]
-        AP1[Sliding Window]
-        AP2[Two Pointers]
-        AP3[Trie]
-    end
-    
-    F --> DS --> T --> G --> A --> DP --> AP"""
-    
-    elif 'microservice' in prompt_lower or 'architecture' in prompt_lower:
-        return """flowchart TD
-    Client[Client Application]
-    Gateway[API Gateway]
-    Auth[Auth Service]
-    UserSvc[User Service]
-    OrderSvc[Order Service]
-    DB[(Database)]
-    Cache[(Redis Cache)]
-    
-    Client --> Gateway
-    Gateway --> Auth
-    Gateway --> UserSvc
-    Gateway --> OrderSvc
-    UserSvc --> DB
-    OrderSvc --> DB
-    UserSvc --> Cache
-    OrderSvc --> Cache"""
-    
-    elif 'cicd' in prompt_lower or 'pipeline' in prompt_lower or 'deployment' in prompt_lower:
-        return """flowchart LR
-    Code[Code Commit]
-    Build[Build]
-    Test[Run Tests]
-    Deploy[Deploy]
-    Monitor[Monitor]
-    
-    Code --> Build --> Test --> Deploy --> Monitor
-    Monitor -.Feedback.-> Code"""
-    
-    else:
-        # Generic flowchart from keywords
-        keywords = [w.strip(',.!?') for w in prompt.split() if len(w) > 3][:6]
-        if len(keywords) < 2:
-            keywords = ['Start', 'Process', 'End']
-        
-        mermaid_code = "flowchart TD\n"
-        for i, kw in enumerate(keywords):
-            node_id = chr(65 + i)  # A, B, C, ...
-            mermaid_code += f'    {node_id}["{kw.capitalize()}"]\n'
-        
-        for i in range(len(keywords) - 1):
-            mermaid_code += f'    {chr(65 + i)} --> {chr(65 + i + 1)}\n'
-        
-        return mermaid_code
+    """Generate a Mermaid diagram using pure algorithmic analysis."""
+    generator = MermaidDiagramGenerator(prompt)
+    return generator.generate()
 
 
 def _humanize_response(prompt: str, extra: str = "") -> str:

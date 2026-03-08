@@ -31,10 +31,10 @@ export interface Stroke {
   timestamp: number;
 }
 
-/* ── Shape objects (rect, ellipse, diamond, arrow, line, text, image) ── */
+/* ── Shape objects (rect, ellipse, diamond, arrow, line, text, image, diagram) ── */
 export interface ShapeObject {
   id: string;
-  type: 'rect' | 'ellipse' | 'diamond' | 'line' | 'arrow' | 'text' | 'image';
+  type: 'rect' | 'ellipse' | 'diamond' | 'line' | 'arrow' | 'text' | 'image' | 'diagram';
   x: number;
   y: number;
   width?: number;
@@ -42,6 +42,8 @@ export interface ShapeObject {
   points?: number[];
   text?: string;
   src?: string;
+  mermaid?: string;      // Mermaid source code for AI diagrams
+  svgData?: string;      // Rendered SVG data for AI diagrams
   color: string;
   fill?: string;
   strokeWidth: number;
@@ -49,6 +51,7 @@ export interface ShapeObject {
   rotation: number;
   userId: string;
   timestamp: number;
+  isLocked?: boolean;   // AI diagrams are locked and cannot be erased
 }
 
 /* ── A canvas element is either a stroke or a shape ── */

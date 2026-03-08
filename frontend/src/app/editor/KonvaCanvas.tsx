@@ -1,9 +1,10 @@
 'use client';
 
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text as KText, Image as KImage, Transformer } from 'react-konva';
+import { Stage, Layer, Line, Rect, Ellipse, Arrow, Text as KText, Image as KImage, Transformer, Group, Circle } from 'react-konva';
 import Konva from 'konva';
 import { useWhiteboardStore } from '@store/whiteboard';
+import { usePresenceStore, type PresenceUser } from '@store/presence';
 import { roomAPI } from '@lib/services';
 import type { CanvasElement, ShapeObject } from '@app-types/index';
 
@@ -39,12 +40,55 @@ function SvgImageNode({ el, selectedTool, setSelectedIds }: {
       height={el.height || img.naturalHeight}
       opacity={el.opacity}
       rotation={el.rotation}
-      draggable={selectedTool === 'select'}
+      draggable={selectedTool === 'select' && !el.isLocked}
       onClick={() => { if (selectedTool === 'select') setSelectedIds([el.id]); }}
       onDragEnd={(e) => {
         useWhiteboardStore.getState().updateElement(el.id, { x: e.target.x(), y: e.target.y() } as any);
       }}
     />
+  );
+}
+
+/* ── Component: renders user cursors (presence) ── */
+function UserCursors({ users, panX, panY, zoom, localUserId }: {
+  users: PresenceUser[];
+  panX: number;
+  panY: number;
+  zoom: number;
+  localUserId: string | null;
+}) {
+  return (
+    <>
+      {users.map((user) => {
+        if (user.id === localUserId) return null;
+        return (
+          <Group key={user.id} x={user.cursorX * zoom + panX} y={user.cursorY * zoom + panY}>
+            <Circle
+              radius={6}
+              fill={user.color}
+              stroke="#fff"
+              strokeWidth={2}
+            />
+            <Rect
+              x={12}
+              y={-8}
+              width={Math.max(60, user.name.length * 8)}
+              height={20}
+              fill={user.color}
+              cornerRadius={4}
+            />
+            <KText
+              x={16}
+              y={-4}
+              text={user.name.slice(0, 10)}
+              fontSize={12}
+              fill="#fff"
+              fontStyle="bold"
+            />
+          </Group>
+        );
+      })}
+    </>
   );
 }
 
@@ -56,13 +100,16 @@ interface Props {
   roomId: string;
   showAiPanel: boolean;
   layout: 'canvas' | 'doc' | 'both';
+  onCursorMove?: (x: number, y: number) => void;
 }
 
-export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
+export default function KonvaCanvas({ roomId, showAiPanel, layout, onCursorMove }: Props) {
   const {
     elements, selectedTool, selectedColor, strokeWidth, zoom, panX, panY, selectedIds,
     addElement, setSelectedIds, clearSelection, setZoom, setPan,
   } = useWhiteboardStore();
+
+  const { users: presenceUsers, localUserId } = usePresenceStore();
 
   const stageRef = useRef<Konva.Stage>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -155,6 +202,12 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
 
   /* ── mouse move ── */
   const onMove = useCallback(() => {
+    // Emit cursor position for presence
+    if (onCursorMove) {
+      const pos = ptr();
+      onCursorMove(pos.x, pos.y);
+    }
+
     if (isPanning) {
       const p = stageRef.current?.getPointerPosition();
       if (!p) return;
@@ -178,7 +231,7 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
         userId: '', timestamp: 0,
       });
     }
-  }, [isPanning, isDrawing, selectedTool, shapeStart, selectedColor, strokeWidth, ptr, panX, panY, lastPan, setPan]);
+  }, [isPanning, isDrawing, selectedTool, shapeStart, selectedColor, strokeWidth, ptr, panX, panY, lastPan, setPan, onCursorMove]);
 
   /* ── mouse up ── */
   const onUp = useCallback(() => {
@@ -250,10 +303,14 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
       );
     }
     const s = el as Extract<CanvasElement, { kind: 'shape' }>;
+
+    // Handle locked elements (AI diagrams) - cannot be erased
+    const isLocked = s.isLocked || s.type === 'diagram';
+
     const base = {
       key: s.id, id: s.id, x: s.x, y: s.y,
       stroke: s.color, strokeWidth: s.strokeWidth, opacity: s.opacity, rotation: s.rotation,
-      draggable: selectedTool === 'select',
+      draggable: selectedTool === 'select' && !isLocked,
       onClick: () => { if (selectedTool === 'select') setSelectedIds([s.id]); },
       onDragEnd: (e: Konva.KonvaEventObject<DragEvent>) => {
         useWhiteboardStore.getState().updateElement(s.id, { x: e.target.x(), y: e.target.y() } as any);
@@ -277,6 +334,7 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
           />
         );
       case 'image':
+      case 'diagram':
         return (
           <SvgImageNode
             key={s.id}
@@ -304,6 +362,9 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
     }
   };
 
+  // Get presence users array
+  const presenceUsersArray = Array.from(presenceUsers.values());
+
   return (
     <Stage
       ref={stageRef}
@@ -327,10 +388,9 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
           />
         )}
         {renderTemp()}
-        <Transformer 
+        <Transformer
           ref={transformerRef}
-          onTransformEnd={(e) => {
-            // Update selected elements after transform
+          onTransformEnd={() => {
             selectedIds.forEach((id) => {
               const node = stageRef.current?.findOne(`#${id}`);
               if (node) {
@@ -346,6 +406,16 @@ export default function KonvaCanvas({ roomId, showAiPanel, layout }: Props) {
               }
             });
           }}
+        />
+      </Layer>
+      {/* Presence cursors layer */}
+      <Layer>
+        <UserCursors
+          users={presenceUsersArray}
+          panX={panX}
+          panY={panY}
+          zoom={zoom}
+          localUserId={localUserId}
         />
       </Layer>
     </Stage>

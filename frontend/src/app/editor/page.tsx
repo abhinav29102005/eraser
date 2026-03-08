@@ -4,17 +4,20 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useWhiteboardStore } from '@store/whiteboard';
+import { usePresenceStore, type PresenceUser } from '@store/presence';
+import { connectSocket } from '@lib/socket';
 import { roomAPI, aiAPI } from '@lib/services';
 import toast from 'react-hot-toast';
 import Link from 'next/link';
 import mermaid from 'mermaid';
 import type { CanvasElement, Tool, ShapeObject, AIDiagramSVGResult } from '@app-types/index';
+import type { Socket } from 'socket.io-client';
 
 /* Initialize mermaid */
 mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'loose' });
 
 /* Konva must be loaded client-side only (it accesses `window`) */
-const KonvaCanvas = dynamic<{ roomId: string; showAiPanel: boolean; layout: 'canvas' | 'doc' | 'both' }>(
+const KonvaCanvas = dynamic<{ roomId: string; showAiPanel: boolean; layout: 'canvas' | 'doc' | 'both'; onCursorMove?: (x: number, y: number) => void }>(
   () => import('./KonvaCanvas'),
   { ssr: false },
 );
@@ -91,6 +94,10 @@ export default function EditorPage() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [onlineUsers, setOnlineUsers] = useState<PresenceUser[]>([]);
+
+  const { setLocalUser, addUser, removeUser, updateUserCursor, clearUsers } = usePresenceStore();
 
   /* ─── Load room data ─── */
   useEffect(() => {
@@ -139,6 +146,141 @@ export default function EditorPage() {
       })
       .catch(() => toast.error('Failed to load canvas'));
   }, [roomId, router, setElements]);
+
+  /* ─── Socket connection for real-time collaboration ─── */
+  useEffect(() => {
+    if (!roomId) return;
+    const userId = localStorage.getItem("userId") || "";
+    const userName = localStorage.getItem("userName") || "Anonymous";
+    if (!userId) return;
+
+    // Initialize presence store
+    setLocalUser(userId, userName, "#3b82f6");
+
+    // Connect socket
+    const socketInstance = connectSocket(userId);
+    setSocket(socketInstance);
+
+    // Set up socket event listeners
+    const handleConnect = () => {
+      console.log("Connected to socket server");
+      socketInstance.emit("join_room", { room_id: roomId, user_id: userId, user_name: userName });
+    };
+
+    const handleRoomData = (data: { objects: any[] }) => {
+      console.log("Received room data:", data.objects?.length, "objects");
+      if (data.objects && Array.isArray(data.objects)) {
+        const converted: CanvasElement[] = data.objects.map((obj: any) => {
+          if (obj.type === "pen" || obj.type === "eraser" || obj.data?.points) {
+            return {
+              kind: "stroke" as const,
+              id: obj.id,
+              tool: (obj.type === "pen" || obj.type === "eraser") ? obj.type : "pen" as const,
+              points: obj.data?.points || [],
+              color: obj.color || "#ffffff",
+              strokeWidth: obj.stroke_width || 2,
+              opacity: 1,
+              userId: obj.userId || '',
+              timestamp: obj.timestamp || Date.now(),
+            };
+          }
+          return {
+            kind: "shape" as const,
+            id: obj.id,
+            type: (obj.type || "rect") as ShapeObject["type"],
+            x: obj.x || 0, y: obj.y || 0,
+            width: obj.data?.width || 100,
+            height: obj.data?.height || 100,
+            points: obj.data?.points,
+            text: obj.data?.text,
+            src: obj.data?.src,
+            color: obj.color || "#ffffff",
+            fill: obj.data?.fill || '',
+            strokeWidth: obj.stroke_width || 2,
+            opacity: 1, rotation: 0,
+            userId: obj.userId || '',
+            timestamp: obj.timestamp || Date.now(),
+          };
+        });
+        setElements(converted);
+      }
+    };
+
+    const handleObjectDrawn = (data: any) => {
+      if (data.type === "pen" || data.type === "eraser" || data.data?.points) {
+        const el: CanvasElement = {
+          kind: "stroke",
+          id: data.id,
+          tool: data.type as 'pen' | 'eraser',
+          points: data.data?.points || [],
+          color: data.color || "#ffffff",
+          strokeWidth: data.strokeWidth || 2,
+          opacity: 1,
+          userId: data.userId || '',
+          timestamp: data.timestamp || Date.now(),
+        };
+        addElement(el);
+      } else {
+        const el: CanvasElement = {
+          kind: "shape",
+          id: data.id,
+          type: (data.type || "rect") as ShapeObject["type"],
+          x: data.x || 0, y: data.y || 0,
+          width: data.data?.width || 100,
+          height: data.data?.height || 100,
+          points: data.data?.points,
+          text: data.data?.text,
+          src: data.data?.src,
+          color: data.color || "#ffffff",
+          fill: data.data?.fill || '',
+          strokeWidth: data.strokeWidth || 2,
+          opacity: 1, rotation: 0,
+          userId: data.userId || '',
+          timestamp: data.timestamp || Date.now(),
+        };
+        addElement(el);
+      }
+    };
+
+    const handleObjectDeleted = (data: { object_id: string }) => {
+      removeElement(data.object_id);
+    };
+
+    const handleRoomCleared = () => {
+      clearElements();
+    };
+
+    const handleCursorMoved = (data: { userId: string; x: number; y: number }) => {
+      if (data.userId !== userId) {
+        updateUserCursor(data.userId, data.x, data.y);
+      }
+    };
+
+    const handleUsersUpdate = (users: PresenceUser[]) => {
+      setOnlineUsers(users);
+      clearUsers();
+      users.forEach((user) => addUser(user));
+    };
+
+    socketInstance.on("connect", handleConnect);
+    socketInstance.on("room_data", handleRoomData);
+    socketInstance.on("object_drawn", handleObjectDrawn);
+    socketInstance.on("object_deleted", handleObjectDeleted);
+    socketInstance.on("room_cleared", handleRoomCleared);
+    socketInstance.on("cursor_moved", handleCursorMoved);
+    socketInstance.on("users_update", handleUsersUpdate);
+
+    return () => {
+      socketInstance.off("connect", handleConnect);
+      socketInstance.off("room_data", handleRoomData);
+      socketInstance.off("object_drawn", handleObjectDrawn);
+      socketInstance.off("object_deleted", handleObjectDeleted);
+      socketInstance.off("room_cleared", handleRoomCleared);
+      socketInstance.off("cursor_moved", handleCursorMoved);
+      socketInstance.off("users_update", handleUsersUpdate);
+      socketInstance.emit("leave_room", { room_id: roomId, user_id: userId });
+    };
+  }, [roomId, setElements, addElement, removeElement, clearElements, setLocalUser, addUser, removeUser, updateUserCursor, clearUsers]);
 
   /* ─── Keyboard shortcuts ─── */
   useEffect(() => {
@@ -300,6 +442,13 @@ export default function EditorPage() {
     toast.success('Use Ctrl+Shift+S to export (coming soon)');
   };
 
+  /* ─── Handle cursor movement for presence ─── */
+  const handleCursorMove = useCallback((x: number, y: number) => {
+    if (socket && socket.connected) {
+      socket.emit('cursor_move', { room_id: roomId, x, y });
+    }
+  }, [socket, roomId]);
+
   /* ─── Save canvas state ─── */
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -428,6 +577,21 @@ export default function EditorPage() {
         <span className="text-sm font-medium text-surface-200 truncate max-w-[140px]">{roomName}</span>
         {lastSaved && <span className="text-[9px] text-surface-600 ml-1">saved {lastSaved.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
         <div className="w-px h-6 bg-surface-700 mx-1" />
+
+        {onlineUsers.length > 0 && (
+          <div className="flex items-center -space-x-2" title={`${onlineUsers.length} user(s) online`}>
+            {onlineUsers.slice(0, 3).map((user) => (
+              <div key={user.id} className="w-7 h-7 rounded-full border-2 border-surface-900 flex items-center justify-center text-xs font-bold text-white" style={{ backgroundColor: user.color }} title={user.name}>
+                {user.name.charAt(0).toUpperCase()}
+              </div>
+            ))}
+            {onlineUsers.length > 3 && (
+              <div className="w-7 h-7 rounded-full border-2 border-surface-900 bg-surface-700 flex items-center justify-center text-xs font-bold text-surface-300">
+                +{onlineUsers.length - 3}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Layout toggle — Doc | Both | Canvas (like eraser.io) */}
         <div className="flex items-center bg-surface-800 border border-surface-700 rounded-lg p-0.5 gap-0.5">
@@ -581,7 +745,7 @@ export default function EditorPage() {
               backgroundPosition: `${panX % (24 * zoom)}px ${panY % (24 * zoom)}px`,
             }}
           />
-          <KonvaCanvas roomId={roomId} showAiPanel={showAiPanel} layout={layout} />
+          <KonvaCanvas roomId={roomId} showAiPanel={showAiPanel} layout={layout}  onCursorMove={handleCursorMove} />
           {/* Bottom info */}
           <div className="absolute bottom-3 left-3 flex items-center gap-2 text-[10px] text-surface-500 bg-surface-900/80 backdrop-blur-sm border border-surface-700/40 rounded-lg px-3 py-1.5 z-10">
             <span>{elements.length} elements</span>
